@@ -11,7 +11,7 @@
 #include <linux/smp.h>
 
 unsigned long lpj_fine;
-unsigned long preset_lpj;
+unsigned long preset_lpj = 9936896ul;
 static int __init lpj_setup(char *str)
 {
 	preset_lpj = simple_strtoul(str,NULL,0);
@@ -247,6 +247,9 @@ void __cpuinit calibrate_delay(void)
 {
 	unsigned long lpj;
 	static bool printed;
+	extern void mtu_check_hang(void);
+
+	mtu_check_hang();
 
 	if (preset_lpj) {
 		lpj = preset_lpj;

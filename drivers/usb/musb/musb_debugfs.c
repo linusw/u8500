@@ -260,14 +260,20 @@ int __init musb_init_debugfs(struct musb *musb)
 		ret = PTR_ERR(root);
 		goto err0;
 	}
-
+#if defined (CONFIG_MACH_SEC_SKOMER)
+	file = debugfs_create_file("regdump", S_IRUSR | S_IRGRP, root, musb,
+			&musb_regdump_fops);
+#endif
 	file = debugfs_create_file("regdump", S_IRUGO, root, musb,
 			&musb_regdump_fops);
 	if (IS_ERR(file)) {
 		ret = PTR_ERR(file);
 		goto err1;
 	}
-
+#if defined (CONFIG_MACH_SEC_SKOMER)
+	file = debugfs_create_file("testmode", S_IRUSR | S_IRGRP | S_IWUSR,
+			root, musb, &musb_test_mode_fops);
+#endif
 	file = debugfs_create_file("testmode", S_IRUGO | S_IWUSR,
 			root, musb, &musb_test_mode_fops);
 	if (IS_ERR(file)) {
