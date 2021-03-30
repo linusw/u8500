@@ -63,11 +63,11 @@
 /* Master controller (MCR) register */
 #define I2C_MCR_OP		(0x1 << 0)	/* Operation */
 #define I2C_MCR_A7		(0x7f << 1)	/* 7-bit address */
-#define I2C_MCR_EA10		(0x7 << 8) 	/* 10-bit Extended address */
+#define I2C_MCR_EA10		(0x7 << 8)	/* 10-bit Extended address */
 #define I2C_MCR_SB		(0x1 << 11)	/* Extended address */
 #define I2C_MCR_AM		(0x3 << 12)	/* Address type */
-#define I2C_MCR_STOP		(0x1 << 14) 	/* Stop condition */
-#define I2C_MCR_LENGTH		(0x7ff << 15) 	/* Transaction length */
+#define I2C_MCR_STOP		(0x1 << 14)	/* Stop condition */
+#define I2C_MCR_LENGTH		(0x7ff << 15)	/* Transaction length */
 
 /* Status register (SR) */
 #define I2C_SR_OP		(0x3 << 0)	/* Operation */
@@ -77,7 +77,7 @@
 #define I2C_SR_LENGTH		(0x7ff << 9)	/* Transfer length */
 
 /* Interrupt mask set/clear (IMSCR) bits */
-#define I2C_IT_TXFE 		(0x1 << 0)
+#define I2C_IT_TXFE		(0x1 << 0)
 #define I2C_IT_TXFNE		(0x1 << 1)
 #define I2C_IT_TXFF		(0x1 << 2)
 #define I2C_IT_TXFOVR		(0x1 << 3)
@@ -135,30 +135,31 @@ struct i2c_nmk_client {
 };
 
 /**
- * struct nmk_i2c_dev - private data structure of the controller
- * @pdev: parent platform device
- * @adap: corresponding I2C adapter
- * @irq: interrupt line for the controller
- * @virtbase: virtual io memory area
- * @clk: hardware i2c block clock
- * @cfg: machine provided controller configuration
- * @cli: holder of client specific data
- * @stop: stop condition
- * @xfer_complete: acknowledge completion for a I2C message
- * @result: controller propogated result
- * @busy: Busy doing transfer
+ * struct nmk_i2c_dev - private data structure of the controller.
+ * @pdev: parent platform device.
+ * @adap: corresponding I2C adapter.
+ * @irq: interrupt line for the controller.
+ * @virtbase: virtual io memory area.
+ * @clk: hardware i2c block clock.
+ * @cfg: machine provided controller configuration.
+ * @cli: holder of client specific data.
+ * @stop: stop condition.
+ * @xfer_complete: acknowledge completion for a I2C message.
+ * @result: controller propogated result.
+ * @regulator: pointer to i2c regulator.
+ * @busy: Busy doing transfer.
  */
 struct nmk_i2c_dev {
 	struct platform_device		*pdev;
-	struct i2c_adapter 		adap;
-	int 				irq;
+	struct i2c_adapter		adap;
+	int				irq;
 	void __iomem			*virtbase;
 	struct clk			*clk;
 	struct nmk_i2c_controller	cfg;
 	struct i2c_nmk_client		cli;
-	int 				stop;
+	int				stop;
 	struct completion		xfer_complete;
-	int 				result;
+	int				result;
 	struct regulator		*regulator;
 	bool				busy;
 };
@@ -216,8 +217,9 @@ static int flush_i2c_fifo(struct nmk_i2c_dev *dev)
 		}
 	}
 
-	dev_err(&dev->pdev->dev, "flushing operation timed out "
-		"giving up after %d attempts", LOOP_ATTEMPTS);
+	dev_err(&dev->pdev->dev,
+		"flushing operation timed out giving up after %d attempts",
+		LOOP_ATTEMPTS);
 
 	return -ETIMEDOUT;
 }
@@ -269,19 +271,30 @@ exit:
 }
 
 /* enable peripheral, master mode operation */
-#define DEFAULT_I2C_REG_CR 	((1 << 1) | I2C_CR_PE)
+#define DEFAULT_I2C_REG_CR	((1 << 1) | I2C_CR_PE)
 
 /**
  * load_i2c_mcr_reg() - load the MCR register
  * @dev: private data of controller
+ * @flags: message flags
  */
-static u32 load_i2c_mcr_reg(struct nmk_i2c_dev *dev)
+static u32 load_i2c_mcr_reg(struct nmk_i2c_dev *dev, u16 flags)
 {
 	u32 mcr = 0;
+	unsigned short slave_adr_3msb_bits;
 
-	/* 7-bit address transaction */
-	mcr |= GEN_MASK(1, I2C_MCR_AM, 12);
 	mcr |= GEN_MASK(dev->cli.slave_adr, I2C_MCR_A7, 1);
+
+	if (unlikely(flags & I2C_M_TEN)) {
+		/* 10-bit address transaction */
+		mcr |= GEN_MASK(2, I2C_MCR_AM, 12);
+		/* Get the top 3 bits */
+		slave_adr_3msb_bits = (dev->cli.slave_adr >> 7) & 0x7;
+		mcr |= GEN_MASK(slave_adr_3msb_bits, I2C_MCR_EA10, 8);
+	} else {
+		/* 7-bit address transaction */
+		mcr |= GEN_MASK(1, I2C_MCR_AM, 12);
+	}
 
 	/* start byte procedure not applied */
 	mcr |= GEN_MASK(0, I2C_MCR_SB, 11);
@@ -362,8 +375,8 @@ static void setup_i2c_controller(struct nmk_i2c_dev *dev)
 	 * and high speed (up to 3.4 Mb/s)
 	 */
 	if (dev->cfg.sm > I2C_FREQ_MODE_FAST) {
-		dev_err(&dev->pdev->dev, "do not support this mode "
-			"defaulting to std. mode\n");
+		dev_err(&dev->pdev->dev,
+			"do not support this mode defaulting to std. mode\n");
 		brcr2 = i2c_clk/(100000 * 2) & 0xffff;
 		writel((brcr1 | brcr2), dev->virtbase + I2C_BRCR);
 		writel(I2C_FREQ_MODE_STANDARD << 4,
@@ -379,19 +392,20 @@ static void setup_i2c_controller(struct nmk_i2c_dev *dev)
 /**
  * read_i2c() - Read from I2C client device
  * @dev: private data of I2C Driver
+ * @flags: message flags
  *
  * This function reads from i2c client device when controller is in
  * master mode. There is a completion timeout. If there is no transfer
  * before timeout error is returned.
  */
-static int read_i2c(struct nmk_i2c_dev *dev)
+static int read_i2c(struct nmk_i2c_dev *dev, u16 flags)
 {
 	u32 status = 0;
 	u32 mcr;
 	u32 irq_mask = 0;
 	int timeout;
 
-	mcr = load_i2c_mcr_reg(dev);
+	mcr = load_i2c_mcr_reg(dev, flags);
 	writel(mcr, dev->virtbase + I2C_MCR);
 
 	/* load the current CR value */
@@ -417,19 +431,19 @@ static int read_i2c(struct nmk_i2c_dev *dev)
 	writel(readl(dev->virtbase + I2C_IMSCR) | irq_mask,
 			dev->virtbase + I2C_IMSCR);
 
-	timeout = wait_for_completion_interruptible_timeout(
+	timeout = wait_for_completion_timeout(
 		&dev->xfer_complete, dev->adap.timeout);
 
 	if (timeout < 0) {
 		dev_err(&dev->pdev->dev,
-			"wait_for_completion_interruptible_timeout"
+			"wait_for_completion_timeout "
 			"returned %d waiting for event\n", timeout);
 		status = timeout;
 	}
 
 	if (timeout == 0) {
 		/* Controller timed out */
-		dev_err(&dev->pdev->dev, "read from slave 0x%x timed out\n",
+		dev_err(&dev->pdev->dev, "Read from Slave 0x%x timed out\n",
 				dev->cli.slave_adr);
 		status = -ETIMEDOUT;
 	}
@@ -457,17 +471,18 @@ static void fill_tx_fifo(struct nmk_i2c_dev *dev, int no_bytes)
 /**
  * write_i2c() - Write data to I2C client.
  * @dev: private data of I2C Driver
+ * @flags: message flags
  *
  * This function writes data to I2C client
  */
-static int write_i2c(struct nmk_i2c_dev *dev)
+static int write_i2c(struct nmk_i2c_dev *dev, u16 flags)
 {
 	u32 status = 0;
 	u32 mcr;
 	u32 irq_mask = 0;
 	int timeout;
 
-	mcr = load_i2c_mcr_reg(dev);
+	mcr = load_i2c_mcr_reg(dev, flags);
 
 	writel(mcr, dev->virtbase + I2C_MCR);
 
@@ -504,19 +519,19 @@ static int write_i2c(struct nmk_i2c_dev *dev)
 	writel(readl(dev->virtbase + I2C_IMSCR) | irq_mask,
 			dev->virtbase + I2C_IMSCR);
 
-	timeout = wait_for_completion_interruptible_timeout(
+	timeout = wait_for_completion_timeout(
 		&dev->xfer_complete, dev->adap.timeout);
 
 	if (timeout < 0) {
 		dev_err(&dev->pdev->dev,
-			"wait_for_completion_interruptible_timeout"
+			"wait_for_completion_timeout "
 			"returned %d waiting for event\n", timeout);
 		status = timeout;
 	}
 
 	if (timeout == 0) {
 		/* Controller timed out */
-		dev_err(&dev->pdev->dev, "write to slave 0x%x timed out\n",
+		dev_err(&dev->pdev->dev, "Write to slave 0x%x timed out\n",
 				dev->cli.slave_adr);
 		status = -ETIMEDOUT;
 	}
@@ -536,11 +551,11 @@ static int nmk_i2c_xfer_one(struct nmk_i2c_dev *dev, u16 flags)
 	if (flags & I2C_M_RD) {
 		/* read operation */
 		dev->cli.operation = I2C_READ;
-		status = read_i2c(dev);
+		status = read_i2c(dev, flags);
 	} else {
 		/* write operation */
 		dev->cli.operation = I2C_WRITE;
-		status = write_i2c(dev);
+		status = write_i2c(dev, flags);
 	}
 
 	if (status || (dev->result)) {
@@ -555,8 +570,8 @@ static int nmk_i2c_xfer_one(struct nmk_i2c_dev *dev, u16 flags)
 		if (((i2c_sr >> 2) & 0x3) == 0x3) {
 			/* get the abort cause */
 			cause =	(i2c_sr >> 4) & 0x7;
-			dev_err(&dev->pdev->dev, "%s\n", cause
-				>= ARRAY_SIZE(abort_causes) ?
+			dev_err(&dev->pdev->dev, "%s\n",
+				cause >= ARRAY_SIZE(abort_causes) ?
 				"unknown reason" :
 				abort_causes[cause]);
 		}
@@ -581,13 +596,13 @@ static int nmk_i2c_xfer_one(struct nmk_i2c_dev *dev, u16 flags)
  *
  * NOTE:
  * READ TRANSFER : We impose a restriction of the first message to be the
- * 		index message for any read transaction.
- * 		- a no index is coded as '0',
- * 		- 2byte big endian index is coded as '3'
- * 		!!! msg[0].buf holds the actual index.
- * 		This is compatible with generic messages of smbus emulator
- * 		that send a one byte index.
- * 		eg. a I2C transation to read 2 bytes from index 0
+ *		index message for any read transaction.
+ *		- a no index is coded as '0',
+ *		- 2byte big endian index is coded as '3'
+ *		!!! msg[0].buf holds the actual index.
+ *		This is compatible with generic messages of smbus emulator
+ *		that send a one byte index.
+ *		eg. a I2C transation to read 2 bytes from index 0
  *			idx = 0;
  *			msg[0].addr = client->addr;
  *			msg[0].flags = 0x0;
@@ -626,11 +641,7 @@ static int nmk_i2c_xfer(struct i2c_adapter *i2c_adap,
 
 	dev->busy = true;
 
-	if (dev->regulator)
-		regulator_enable(dev->regulator);
 	pm_runtime_get_sync(&dev->pdev->dev);
-
-	clk_enable(dev->clk);
 
 	status = init_hw(dev);
 	if (status)
@@ -642,13 +653,6 @@ static int nmk_i2c_xfer(struct i2c_adapter *i2c_adap,
 		setup_i2c_controller(dev);
 
 		for (i = 0; i < num_msgs; i++) {
-			if (unlikely(msgs[i].flags & I2C_M_TEN)) {
-				dev_err(&dev->pdev->dev, "10 bit addressing"
-						"not supported\n");
-
-				status = -EINVAL;
-				goto out;
-			}
 			dev->cli.slave_adr	= msgs[i].addr;
 			dev->cli.buffer		= msgs[i].buf;
 			dev->cli.count		= msgs[i].len;
@@ -664,10 +668,8 @@ static int nmk_i2c_xfer(struct i2c_adapter *i2c_adap,
 	}
 
 out:
-	clk_disable(dev->clk);
-	pm_runtime_put_sync(&dev->pdev->dev);
-	if (dev->regulator)
-		regulator_disable(dev->regulator);
+
+	pm_runtime_put(&dev->pdev->dev);
 
 	dev->busy = false;
 
@@ -681,7 +683,7 @@ out:
 /**
  * disable_interrupts() - disable the interrupts
  * @dev: private data of controller
- * @irq: interrupt number
+ * @irq: interrupt number.
  */
 static int disable_interrupts(struct nmk_i2c_dev *dev, u32 irq)
 {
@@ -788,8 +790,9 @@ static irqreturn_t i2c_irq_handler(int irq, void *arg)
 
 		if (dev->cli.count) {
 			dev->result = -EIO;
-			dev_err(&dev->pdev->dev, "%lu bytes still remain to be"
-					"xfered\n", dev->cli.count);
+			dev_err(&dev->pdev->dev,
+				"%lu bytes still remain to be xfered\n",
+				dev->cli.count);
 			(void) init_hw(dev);
 		}
 		complete(&dev->xfer_complete);
@@ -856,9 +859,9 @@ static irqreturn_t i2c_irq_handler(int irq, void *arg)
 
 
 #ifdef CONFIG_PM
-static int nmk_i2c_suspend(struct device *dev)
+
+static int nmk_i2c_suspend(struct platform_device *pdev, pm_message_t state)
 {
-	struct platform_device *pdev = to_platform_device(dev);
 	struct nmk_i2c_dev *nmk_i2c = platform_get_drvdata(pdev);
 
 	if (nmk_i2c->busy)
@@ -867,14 +870,43 @@ static int nmk_i2c_suspend(struct device *dev)
 	return 0;
 }
 
-static int nmk_i2c_resume(struct device *dev)
+static int nmk_i2c_suspend_noirq(struct device *dev)
 {
+	struct nmk_i2c_dev *nmk_i2c =
+		platform_get_drvdata(to_platform_device(dev));
+
+	if (nmk_i2c->busy)
+		return -EBUSY;
+
 	return 0;
 }
+
 #else
 #define nmk_i2c_suspend	NULL
-#define nmk_i2c_resume	NULL
+#define nmk_i2c_suspend_noirq NULL
 #endif
+
+static int nmk_i2c_runtime_suspend(struct device *dev)
+{
+	struct platform_device *pdev = to_platform_device(dev);
+	struct nmk_i2c_dev *nmk_i2c = platform_get_drvdata(pdev);
+
+	clk_disable(nmk_i2c->clk);
+	if (nmk_i2c->regulator)
+		regulator_disable(nmk_i2c->regulator);
+	return 0;
+}
+
+static int nmk_i2c_runtime_resume(struct device *dev)
+{
+	struct platform_device *pdev = to_platform_device(dev);
+	struct nmk_i2c_dev *nmk_i2c = platform_get_drvdata(pdev);
+
+	if (nmk_i2c->regulator)
+		regulator_enable(nmk_i2c->regulator);
+	clk_enable(nmk_i2c->clk);
+	return 0;
+}
 
 /*
  * We use noirq so that we suspend late and resume before the wakeup interrupt
@@ -882,19 +914,33 @@ static int nmk_i2c_resume(struct device *dev)
  * there has been a regular pm runtime resume (via pm_runtime_get_sync()).
  */
 static const struct dev_pm_ops nmk_i2c_pm = {
-	.suspend_noirq	= nmk_i2c_suspend,
-	.resume_noirq	= nmk_i2c_resume,
+	SET_RUNTIME_PM_OPS(nmk_i2c_runtime_suspend, nmk_i2c_runtime_resume,
+			   NULL)
+	.suspend_noirq	= nmk_i2c_suspend_noirq,
 };
 
 static unsigned int nmk_i2c_functionality(struct i2c_adapter *adap)
 {
-	return I2C_FUNC_I2C | I2C_FUNC_SMBUS_EMUL;
+	return I2C_FUNC_I2C | I2C_FUNC_SMBUS_EMUL | I2C_FUNC_10BIT_ADDR;
 }
 
+#ifdef CONFIG_SAMSUNG_PANIC_DISPLAY_DEVICES
+static struct i2c_algorithm nmk_i2c_algo = {
+#else
 static const struct i2c_algorithm nmk_i2c_algo = {
+#endif //CONFIG_SAMSUNG_PANIC_DISPLAY_DEVICES
 	.master_xfer	= nmk_i2c_xfer,
 	.functionality	= nmk_i2c_functionality
 };
+
+#ifdef CONFIG_SAMSUNG_PANIC_DISPLAY_DEVICES
+void i2c_remap_fp(struct i2c_algorithm *fp)
+{
+	nmk_i2c_algo.master_xfer = NULL;
+	nmk_i2c_algo.master_panic_xfer = fp->master_panic_xfer;
+	nmk_i2c_algo.functionality = fp->functionality;
+}
+#endif
 
 static int __devinit nmk_i2c_probe(struct platform_device *pdev)
 {
@@ -922,7 +968,7 @@ static int __devinit nmk_i2c_probe(struct platform_device *pdev)
 	}
 
 	if (request_mem_region(res->start, resource_size(res),
-		DRIVER_NAME "I/O region") == 	NULL)	{
+		DRIVER_NAME "I/O region") == NULL)	{
 		ret = -EBUSY;
 		goto err_no_region;
 	}
@@ -979,8 +1025,9 @@ static int __devinit nmk_i2c_probe(struct platform_device *pdev)
 
 	i2c_set_adapdata(adap, dev);
 
-	dev_info(&pdev->dev, "initialize %s on virtual "
-		"base %p\n", adap->name, dev->virtbase);
+	dev_info(&pdev->dev,
+		 "initialize %s on virtual base %p\n",
+		 adap->name, dev->virtbase);
 
 	ret = i2c_add_numbered_adapter(adap);
 	if (ret) {
@@ -1043,6 +1090,7 @@ static struct platform_driver nmk_i2c_driver = {
 	},
 	.probe = nmk_i2c_probe,
 	.remove = __devexit_p(nmk_i2c_remove),
+	.suspend = nmk_i2c_suspend,
 };
 
 static int __init nmk_i2c_init(void)
