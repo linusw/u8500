@@ -23,6 +23,7 @@ obj-$(CONFIG_RTL8192SU)		+= rtl8192su/
 obj-$(CONFIG_RTL8192U)		+= rtl8192u/
 obj-$(CONFIG_RTL8192E)		+= rtl8192e/
 obj-$(CONFIG_TRANZPORT)		+= frontier/
+obj-$(CONFIG_ANDROID)		+= android/
 obj-$(CONFIG_DREAM)		+= dream/
 obj-$(CONFIG_POHMELFS)		+= pohmelfs/
 obj-$(CONFIG_IDE_PHISON)	+= phison/
@@ -54,3 +55,12 @@ obj-$(CONFIG_ADIS16255)		+= adis16255/
 obj-$(CONFIG_FB_XGI)		+= xgifb/
 obj-$(CONFIG_TOUCHSCREEN_MRSTOUCH)	+= mrst-touchscreen/
 obj-$(CONFIG_MSM_STAGING)	+= msm/
+obj-$(CONFIG_TOUCHSCREEN_SYNAPTICS_I2C_RMI4)	+= ste_rmi4/
+ifeq ($(CONFIG_U8500_MMIO), y)
+	obj-y	+= mmio/
+endif
+ifeq ($(CONFIG_U8500_FLASH), y)
+        obj-y	+= camera_flash/
+endif
+obj-$(CONFIG_U8500_CM)		+= nmf-cm/
+obj-$(CONFIG_ZRAM)    		+= zram/

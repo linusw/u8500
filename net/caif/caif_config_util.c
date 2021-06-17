@@ -10,17 +10,24 @@
 #include <net/caif/cfcnfg.h>
 #include <net/caif/caif_dev.h>
 
-int connect_req_to_link_param(struct cfcnfg *cnfg,
-				struct caif_connect_request *s,
-				struct cfctrl_link_param *l)
+int caif_connect_req_to_link_param(struct cfcnfg *cnfg,
+				   struct caif_connect_request *s,
+				   struct cfctrl_link_param *l)
 {
 	struct dev_info *dev_info;
 	enum cfcnfg_phy_preference pref;
-	memset(l, 0, sizeof(*l));
-	l->priority = s->priority;
+	int res;
 
-	if (s->link_name[0] != '\0')
-		l->phyid = cfcnfg_get_named(cnfg, s->link_name);
+	memset(l, 0, sizeof(*l));
+	/* In caif protocol low value is high priority */
+	l->priority = CAIF_PRIO_MAX - s->priority + 1;
+
+	if (s->ifindex != 0){
+		res = cfcnfg_get_id_from_ifi(cnfg, s->ifindex);
+		if (res < 0)
+			return res;
+		l->phyid = res;
+	}
 	else {
 		switch (s->link_selector) {
 		case CAIF_LINK_HIGH_BANDW:
@@ -79,6 +86,11 @@ int connect_req_to_link_param(struct cfcnfg *cnfg,
 		memcpy(l->u.utility.params, s->param.data,
 		       l->u.utility.paramlen);
 
+		break;
+	case CAIFPROTO_DEBUG:
+		l->linktype = CFCTRL_SRV_DBG;
+		l->endpoint = s->sockaddr.u.dbg.service;
+		l->chtype = s->sockaddr.u.dbg.type;
 		break;
 	default:
 		return -EINVAL;

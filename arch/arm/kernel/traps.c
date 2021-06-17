@@ -205,6 +205,7 @@ static void dump_backtrace(struct pt_regs *regs, struct task_struct *tsk)
 void dump_stack(void)
 {
 	dump_backtrace(NULL, NULL);
+	flush_cache_all();
 }
 
 EXPORT_SYMBOL(dump_stack);
@@ -232,6 +233,7 @@ static int __die(const char *str, int err, struct thread_info *thread, struct pt
 	static int die_counter;
 	int ret;
 
+	printk(KERN_EMERG "%s", linux_banner);
 	printk(KERN_EMERG "Internal error: %s: %x [#%d]" S_PREEMPT S_SMP "\n",
 	       str, err, ++die_counter);
 	sysfs_printk_last_file();
@@ -253,6 +255,12 @@ static int __die(const char *str, int err, struct thread_info *thread, struct pt
 		dump_instr(KERN_EMERG, regs);
 	}
 
+#ifdef CONFIG_SAMSUNG_LOG_BUF
+	{
+		extern void sec_extra_die_actions(const char * str);
+		sec_extra_die_actions(str);
+	}
+#endif
 	return ret;
 }
 
@@ -453,7 +461,9 @@ do_cache_op(unsigned long start, unsigned long end, int flags)
 		if (end > vma->vm_end)
 			end = vma->vm_end;
 
-		flush_cache_user_range(vma, start, end);
+		up_read(&mm->mmap_sem);
+		flush_cache_user_range(start, end);
+		return;
 	}
 	up_read(&mm->mmap_sem);
 }
@@ -520,7 +530,8 @@ asmlinkage int arm_syscall(int no, struct pt_regs *regs)
 		thread->tp_value = regs->ARM_r0;
 #if defined(CONFIG_HAS_TLS_REG)
 		asm ("mcr p15, 0, %0, c13, c0, 3" : : "r" (regs->ARM_r0) );
-#elif !defined(CONFIG_TLS_REG_EMUL)
+//#elif !defined(CONFIG_TLS_REG_EMUL)
+#endif
 		/*
 		 * User space must never try to access this directly.
 		 * Expect your app to break eventually if you do so.
@@ -528,7 +539,7 @@ asmlinkage int arm_syscall(int no, struct pt_regs *regs)
 		 * (see entry-armv.S for details)
 		 */
 		*((unsigned int *)0xffff0ff0) = regs->ARM_r0;
-#endif
+//#endif
 		return 0;
 
 #ifdef CONFIG_NEEDS_SYSCALL_FOR_CMPXCHG

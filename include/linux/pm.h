@@ -41,6 +41,12 @@ extern void (*pm_power_off_prepare)(void);
 
 struct device;
 
+#ifdef CONFIG_PM
+extern const char power_group_name[];		/* = "power" */
+#else
+#define power_group_name	NULL
+#endif
+
 typedef struct pm_message {
 	int event;
 } pm_message_t;
@@ -438,6 +444,9 @@ enum rpm_status {
  *
  * RPM_REQ_SUSPEND	Run the device bus type's ->runtime_suspend() callback
  *
+ * RPM_REQ_AUTOSUSPEND	Same as RPM_REQ_SUSPEND, but not until the device has
+ *			been inactive for as long as power.autosuspend_delay
+ *
  * RPM_REQ_RESUME	Run the device bus type's ->runtime_resume() callback
  */
 
@@ -445,6 +454,7 @@ enum rpm_request {
 	RPM_REQ_NONE = 0,
 	RPM_REQ_IDLE,
 	RPM_REQ_SUSPEND,
+	RPM_REQ_AUTOSUSPEND,
 	RPM_REQ_RESUME,
 };
 
@@ -473,10 +483,30 @@ struct dev_pm_info {
 	unsigned int		deferred_resume:1;
 	unsigned int		run_wake:1;
 	unsigned int		runtime_auto:1;
+	unsigned int		no_callbacks:1;
+	unsigned int		irq_safe:1;
+	unsigned int		use_autosuspend:1;
+	unsigned int		timer_autosuspends:1;
 	enum rpm_request	request;
 	enum rpm_status		runtime_status;
 	int			runtime_error;
+	int			autosuspend_delay;
+	unsigned long		last_busy;
+	unsigned long		active_jiffies;
+	unsigned long		suspended_jiffies;
+	unsigned long		accounting_timestamp;
 #endif
+};
+
+extern void update_pm_runtime_accounting(struct device *dev);
+
+/*
+ * Power domains provide callbacks that are executed during system suspend,
+ * hibernation, system resume and during runtime PM transitions along with
+ * subsystem-level and driver-level callbacks.
+ */
+struct dev_power_domain {
+	struct dev_pm_ops	ops;
 };
 
 /*
@@ -583,5 +613,12 @@ extern unsigned int	pm_flags;
 
 #define PM_APM	1
 #define PM_ACPI	2
+
+extern int pm_generic_suspend(struct device *dev);
+extern int pm_generic_resume(struct device *dev);
+extern int pm_generic_freeze(struct device *dev);
+extern int pm_generic_thaw(struct device *dev);
+extern int pm_generic_restore(struct device *dev);
+extern int pm_generic_poweroff(struct device *dev);
 
 #endif /* _LINUX_PM_H */

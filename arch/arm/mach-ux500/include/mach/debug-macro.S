@@ -10,19 +10,17 @@
  */
 #include <mach/hardware.h>
 
-#if CONFIG_UX500_DEBUG_UART > 2
-#error Invalid Ux500 debug UART
+#ifdef CONFIG_UX500_SOC_DB5500
+#define UX500_DEBUG_UART	U5500_UART0_BASE
+#else
+#define UX500_DEBUG_UART	U8500_UART2_BASE
 #endif
-
-#define __UX500_UART(n)	UX500_UART##n##_BASE
-#define UX500_UART(n)	__UX500_UART(n)
-#define UART_BASE	UX500_UART(CONFIG_UX500_DEBUG_UART)
 
 	.macro	addruart, rx, tmp
 	mrc	p15, 0, \rx, c1, c0
 	tst	\rx, #1					@ MMU enabled?
-	ldreq	\rx, =UART_BASE				@ no, physical address
-	ldrne	\rx, =IO_ADDRESS(UART_BASE)		@ yes, virtual address
+	ldreq	\rx, =UX500_DEBUG_UART			@ no, physical address
+	ldrne	\rx, =IO_ADDRESS(UX500_DEBUG_UART)	@ yes, virtual address
 	.endm
 
 #include <asm/hardware/debug-pl01x.S>

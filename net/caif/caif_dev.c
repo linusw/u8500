@@ -9,6 +9,8 @@
  *  and Sakari Ailus <sakari.ailus@nokia.com>
  */
 
+#define pr_fmt(fmt) KBUILD_MODNAME ":%s(): " fmt, __func__
+
 #include <linux/version.h>
 #include <linux/module.h>
 #include <linux/kernel.h>
@@ -118,35 +120,23 @@ static int transmit(struct cflayer *layer, struct cfpkt *pkt)
 {
 	struct caif_device_entry *caifd =
 	    container_of(layer, struct caif_device_entry, layer);
-	struct sk_buff *skb, *skb2;
-	int ret = -EINVAL;
+	struct sk_buff *skb;
+	int err;
+
 	skb = cfpkt_tonative(pkt);
 	skb->dev = caifd->netdev;
-	/*
-	 * Don't allow SKB to be destroyed upon error, but signal resend
-	 * notification to clients. We can't rely on the return value as
-	 * congestion (NET_XMIT_CN) sometimes drops the packet, sometimes don't.
-	 */
-	if (netif_queue_stopped(caifd->netdev))
-		return -EAGAIN;
-	skb2 = skb_get(skb);
 
-	ret = dev_queue_xmit(skb2);
-
-	if (!ret)
-		kfree_skb(skb);
-	else
-		return -EAGAIN;
-
-	return 0;
+	err = dev_queue_xmit(skb);
+	/* Failures may also be positive value. */
+	if (err > 0)
+		err = -EIO;
+	return err;
 }
 
 static int modemcmd(struct cflayer *layr, enum caif_modemcmd ctrl)
 {
 	struct caif_device_entry *caifd;
-	struct caif_dev_common *caifdev;
 	caifd = container_of(layr, struct caif_device_entry, layer);
-	caifdev = netdev_priv(caifd->netdev);
 	if (ctrl == _CAIF_MODEMCMD_PHYIF_USEFULL) {
 		atomic_set(&caifd->in_use, 1);
 		wake_up_interruptible(&caifd->event);
@@ -165,13 +155,11 @@ static int modemcmd(struct cflayer *layr, enum caif_modemcmd ctrl)
 static int receive(struct sk_buff *skb, struct net_device *dev,
 		   struct packet_type *pkttype, struct net_device *orig_dev)
 {
-	struct net *net;
 	struct cfpkt *pkt;
 	struct caif_device_entry *caifd;
-	net = dev_net(dev);
 	pkt = cfpkt_fromnative(CAIF_DIR_IN, skb);
 	caifd = caif_get(dev);
-	if (!caifd || !caifd->layer.up || !caifd->layer.up->ctrlcmd)
+	if (!caifd || !caifd->layer.up || !caifd->layer.up->receive)
 		return NET_RX_DROP;
 
 	if (caifd->layer.up->receive(caifd->layer.up, pkt))
@@ -206,7 +194,6 @@ static int caif_device_notify(struct notifier_block *me, unsigned long what,
 	struct caif_device_entry *caifd = NULL;
 	struct caif_dev_common *caifdev;
 	enum cfcnfg_phy_preference pref;
-	int res = -EINVAL;
 	enum cfcnfg_phy_type phy_type;
 
 	if (dev->type != ARPHRD_CAIF)
@@ -214,25 +201,23 @@ static int caif_device_notify(struct notifier_block *me, unsigned long what,
 
 	switch (what) {
 	case NETDEV_REGISTER:
-		pr_info("CAIF: %s():register %s\n", __func__, dev->name);
 		caifd = caif_device_alloc(dev);
 		if (caifd == NULL)
 			break;
+		pr_info("register %s:", dev->name);
 		caifdev = netdev_priv(dev);
 		caifdev->flowctrl = dev_flowctrl;
 		atomic_set(&caifd->state, what);
-		res = 0;
 		break;
 
 	case NETDEV_UP:
-		pr_info("CAIF: %s(): up %s\n", __func__, dev->name);
 		caifd = caif_get(dev);
 		if (caifd == NULL)
 			break;
+		pr_info("up %s:", dev->name);
 		caifdev = netdev_priv(dev);
 		if (atomic_read(&caifd->state) == NETDEV_UP) {
-			pr_info("CAIF: %s():%s already up\n",
-				__func__, dev->name);
+			pr_info("already up %s:", dev->name);
 			break;
 		}
 		atomic_set(&caifd->state, what);
@@ -255,8 +240,8 @@ static int caif_device_notify(struct notifier_block *me, unsigned long what,
 			pref = CFPHYPREF_HIGH_BW;
 			break;
 		}
-
-		cfcnfg_add_phy_layer(get_caif_conf(),
+		dev_hold(dev);
+		cfcnfg_add_phy_layer(cfg,
 				     phy_type,
 				     dev,
 				     &caifd->layer,
@@ -273,7 +258,7 @@ static int caif_device_notify(struct notifier_block *me, unsigned long what,
 		caifd = caif_get(dev);
 		if (caifd == NULL)
 			break;
-		pr_info("CAIF: %s():going down %s\n", __func__, dev->name);
+		pr_info("going down %s:", dev->name);
 
 		if (atomic_read(&caifd->state) == NETDEV_GOING_DOWN ||
 			atomic_read(&caifd->state) == NETDEV_DOWN)
@@ -285,7 +270,8 @@ static int caif_device_notify(struct notifier_block *me, unsigned long what,
 		caifd->layer.up->ctrlcmd(caifd->layer.up,
 					 _CAIF_CTRLCMD_PHYIF_DOWN_IND,
 					 caifd->layer.id);
-		res = wait_event_interruptible_timeout(caifd->event,
+		might_sleep();
+		wait_event_interruptible_timeout(caifd->event,
 					atomic_read(&caifd->in_use) == 0,
 					TIMEOUT);
 		break;
@@ -294,18 +280,20 @@ static int caif_device_notify(struct notifier_block *me, unsigned long what,
 		caifd = caif_get(dev);
 		if (caifd == NULL)
 			break;
-		pr_info("CAIF: %s(): down %s\n", __func__, dev->name);
+		pr_info("down %s:", dev->name);
 		if (atomic_read(&caifd->in_use))
-			pr_warning("CAIF: %s(): "
-				   "Unregistering an active CAIF device: %s\n",
-				   __func__, dev->name);
-		cfcnfg_del_phy_layer(get_caif_conf(), &caifd->layer);
+			pr_warning("unregistering an active CAIF device: %s\n",
+					dev->name);
+		cfcnfg_del_phy_layer(cfg, &caifd->layer);
+		dev_put(dev);
 		atomic_set(&caifd->state, what);
 		break;
 
 	case NETDEV_UNREGISTER:
 		caifd = caif_get(dev);
-		pr_info("CAIF: %s(): unregister %s\n", __func__, dev->name);
+		if (caifd == NULL)
+			break;
+		pr_info("unregister %s:", dev->name);
 		atomic_set(&caifd->state, what);
 		caif_device_destroy(dev);
 		break;
@@ -318,38 +306,28 @@ static struct notifier_block caif_device_notifier = {
 	.priority = 0,
 };
 
-
-struct cfcnfg *get_caif_conf(void)
-{
-	return cfg;
-}
-EXPORT_SYMBOL(get_caif_conf);
-
 int caif_connect_client(struct caif_connect_request *conn_req,
-			   struct cflayer *client_layer)
+			struct cflayer *client_layer, int *ifindex,
+			int *headroom, int *tailroom)
 {
 	struct cfctrl_link_param param;
 	int ret;
-	ret = connect_req_to_link_param(get_caif_conf(), conn_req, &param);
+
+	ret = caif_connect_req_to_link_param(cfg, conn_req, &param);
 	if (ret)
 		return ret;
 	/* Hook up the adaptation layer. */
-	return cfcnfg_add_adaptation_layer(get_caif_conf(),
-						&param, client_layer);
+	return cfcnfg_add_adaptation_layer(cfg, &param,
+					client_layer, ifindex,
+					headroom, tailroom);
 }
 EXPORT_SYMBOL(caif_connect_client);
 
 int caif_disconnect_client(struct cflayer *adap_layer)
 {
-       return cfcnfg_disconn_adapt_layer(get_caif_conf(), adap_layer);
+	return cfcnfg_disconn_adapt_layer(cfg, adap_layer);
 }
 EXPORT_SYMBOL(caif_disconnect_client);
-
-void caif_release_client(struct cflayer *adap_layer)
-{
-       cfcnfg_release_adap_layer(adap_layer);
-}
-EXPORT_SYMBOL(caif_release_client);
 
 /* Per-namespace Caif devices handling */
 static int caif_init_net(struct net *net)
@@ -363,12 +341,11 @@ static int caif_init_net(struct net *net)
 static void caif_exit_net(struct net *net)
 {
 	struct net_device *dev;
-	int res;
 	rtnl_lock();
 	for_each_netdev(net, dev) {
 		if (dev->type != ARPHRD_CAIF)
 			continue;
-		res = dev_close(dev);
+		dev_close(dev);
 		caif_device_destroy(dev);
 	}
 	rtnl_unlock();
@@ -387,7 +364,7 @@ static int __init caif_device_init(void)
 	int result;
 	cfg = cfcnfg_create();
 	if (!cfg) {
-		pr_warning("CAIF: %s(): can't create cfcnfg.\n", __func__);
+		pr_warn("can't create cfcnfg\n");
 		goto err_cfcnfg_create_failed;
 	}
 	result = register_pernet_device(&caif_net_ops);

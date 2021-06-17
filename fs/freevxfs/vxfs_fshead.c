@@ -46,16 +46,16 @@
 static void
 vxfs_dumpfsh(struct vxfs_fsh *fhp)
 {
-	printk("\n\ndumping fileset header:\n");
-	printk("----------------------------\n");
-	printk("version: %u\n", fhp->fsh_version);
-	printk("fsindex: %u\n", fhp->fsh_fsindex);
-	printk("iauino: %u\tninodes:%u\n",
+	printk(KERN_INFO "\n\ndumping fileset header:\n");
+	printk(KERN_INFO "----------------------------\n");
+	printk(KERN_INFO "version: %u\n", fhp->fsh_version);
+	printk(KERN_INFO "fsindex: %u\n", fhp->fsh_fsindex);
+	printk(KERN_INFO "iauino: %u\tninodes:%u\n",
 			fhp->fsh_iauino, fhp->fsh_ninodes);
-	printk("maxinode: %u\tlctino: %u\n",
+	printk(KERN_INFO "maxinode: %u\tlctino: %u\n",
 			fhp->fsh_maxinode, fhp->fsh_lctino);
-	printk("nau: %u\n", fhp->fsh_nau);
-	printk("ilistino[0]: %u\tilistino[1]: %u\n",
+	printk(KERN_INFO "nau: %u\n", fhp->fsh_nau);
+	printk(KERN_INFO "ilistino[0]: %u\tilistino[1]: %u\n",
 			fhp->fsh_ilistino[0], fhp->fsh_ilistino[1]);
 }
 #endif
@@ -123,7 +123,7 @@ vxfs_read_fshead(struct super_block *sbp)
 
 
 #ifdef DIAGNOSTIC
-	printk("vxfs: fsh inode dump:\n");
+	printk(KERN_INFO "vxfs: fsh inode dump:\n");
 	vxfs_dumpi(vip, infp->vsi_fshino);
 #endif
 

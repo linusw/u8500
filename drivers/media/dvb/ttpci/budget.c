@@ -585,7 +585,7 @@ static void frontend_init(struct budget *budget)
 		if (budget->dvb_frontend) {
 			budget->dvb_frontend->ops.tuner_ops.set_params = s5h1420_tuner_set_params;
 			if (dvb_attach(lnbp21_attach, budget->dvb_frontend, &budget->i2c_adap, 0, 0) == NULL) {
-				printk("%s: No LNBP21 found!\n", __func__);
+				printk(KERN_INFO "%s: No LNBP21 found!\n", __func__);
 				goto error_out;
 			}
 			break;
@@ -601,9 +601,9 @@ static void frontend_init(struct budget *budget)
 		budget->dvb_frontend = dvb_attach(tda10086_attach, &tda10086_config, &budget->i2c_adap);
 		if (budget->dvb_frontend) {
 			if (dvb_attach(tda826x_attach, budget->dvb_frontend, 0x60, &budget->i2c_adap, 0) == NULL)
-				printk("%s: No tda826x found!\n", __func__);
+				printk(KERN_INFO "%s: No tda826x found!\n", __func__);
 			if (dvb_attach(lnbp21_attach, budget->dvb_frontend, &budget->i2c_adap, 0, 0) == NULL) {
-				printk("%s: No LNBP21 found!\n", __func__);
+				printk(KERN_INFO "%s: No LNBP21 found!\n", __func__);
 				goto error_out;
 			}
 			break;
@@ -664,7 +664,7 @@ static void frontend_init(struct budget *budget)
 	}
 
 	if (budget->dvb_frontend == NULL) {
-		printk("budget: A frontend driver was not found for device [%04x:%04x] subsystem [%04x:%04x]\n",
+		printk(KERN_INFO "budget: A frontend driver was not found for device [%04x:%04x] subsystem [%04x:%04x]\n",
 		       budget->dev->pci->vendor,
 		       budget->dev->pci->device,
 		       budget->dev->pci->subsystem_vendor,
@@ -676,7 +676,7 @@ static void frontend_init(struct budget *budget)
 	return;
 
 error_out:
-	printk("budget: Frontend registration failed!\n");
+	printk(KERN_INFO "budget: Frontend registration failed!\n");
 	dvb_frontend_detach(budget->dvb_frontend);
 	budget->dvb_frontend = NULL;
 	return;
@@ -698,7 +698,7 @@ static int budget_attach (struct saa7146_dev* dev, struct saa7146_pci_extension_
 
 	err = ttpci_budget_init(budget, dev, info, THIS_MODULE, adapter_nr);
 	if (err) {
-		printk("==> failed\n");
+		printk(KERN_INFO "==> failed\n");
 		kfree (budget);
 		return err;
 	}

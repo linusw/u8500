@@ -21,7 +21,7 @@
 
 #if defined(CONFIG_DEBUG_ICEDCC)
 
-#ifdef CONFIG_CPU_V6
+#ifdef defined(CONFIG_CPU_V6) || defined(CONFIG_CPU_V7)
 		.macro	loadsp, rb, tmp
 		.endm
 		.macro	writeb, ch, rb
@@ -627,6 +627,8 @@ proc_types:
 @		b	__arm6_mmu_cache_off
 @		b	__armv3_mmu_cache_flush
 
+#if !defined(CONFIG_CPU_V7)
+		/* This collides with some V7 IDs, preventing correct detection */
 		.word	0x00000000		@ old ARM ID
 		.word	0x0000f000
 		mov	pc, lr
@@ -635,6 +637,7 @@ proc_types:
  THUMB(		nop				)
 		mov	pc, lr
  THUMB(		nop				)
+#endif
 
 		.word	0x41007000		@ ARM7/710
 		.word	0xfff8fe00
@@ -944,6 +947,15 @@ iflush:
 		mcr	p15, 0, r10, c7, c5, 0	@ invalidate I+BTB
 		mcr	p15, 0, r10, c7, c10, 4	@ DSB
 		mcr	p15, 0, r10, c7, c5, 4	@ ISB
+#if defined(CONFIG_MACH_SAMSUNG_U8500) || defined(CONFIG_MACH_SAMSUNG_UX500)
+		mov	r2, #0xFF		@ clean & invalidate L2 cache
+		ldr	r1, =0xA04127FC
+		str	r2, [r1]
+l2loop:
+		ldr	r2, [r1]
+		teq	r2, #0
+		bne	l2loop
+#endif
 		mov	pc, lr
 
 __armv5tej_mmu_cache_flush:

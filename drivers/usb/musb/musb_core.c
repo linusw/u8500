@@ -4,6 +4,7 @@
  * Copyright 2005 Mentor Graphics Corporation
  * Copyright (C) 2005-2006 by Texas Instruments
  * Copyright (C) 2006-2007 Nokia Corporation
+ * Copyright (C) 2009 ST Ericsson
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -106,11 +107,15 @@
 #endif
 
 #include "musb_core.h"
-
+#ifdef CONFIG_ARCH_U8500
+#include "ste_config.h"
+#endif
 
 #ifdef CONFIG_ARCH_DAVINCI
 #include "davinci.h"
 #endif
+
+#include <mach/stm_musb.h>
 
 #define TA_WAIT_BCON(m) max_t(int, (m)->a_wait_bcon, OTG_TIME_A_WAIT_BCON)
 
@@ -459,6 +464,29 @@ static irqreturn_t musb_stage0_irq(struct musb *musb, u8 int_usb,
 	DBG(3, "<== Power=%02x, DevCtl=%02x, int_usb=0x%x\n", power, devctl,
 		int_usb);
 
+	/*
+	 * XXX The following code has been inserted here as a temporary hack
+	 * to get some USB events directly from the USB hardware. This code
+	 * and callbacks should eventually be integrated into the generic
+	 * USB gadget stack.
+	 */
+	if (!(devctl & MUSB_DEVCTL_HM)) {
+		if (int_usb & MUSB_INTR_RESET) {
+			if (power & MUSB_POWER_HSMODE)
+				ab8500_bm_usb_state_changed_wrapper(
+					AB8500_BM_USB_STATE_RESET_HS);
+			else
+				ab8500_bm_usb_state_changed_wrapper(
+					AB8500_BM_USB_STATE_RESET_FS);
+		}
+		if (int_usb & MUSB_INTR_RESUME)
+			ab8500_bm_usb_state_changed_wrapper(
+				AB8500_BM_USB_STATE_RESUME);
+		else if (int_usb & MUSB_INTR_SUSPEND)
+			ab8500_bm_usb_state_changed_wrapper(
+				AB8500_BM_USB_STATE_SUSPEND);
+	}
+
 	/* in host mode, the peripheral may issue remote wakeup.
 	 * in peripheral mode, the host may resume the link.
 	 * spurious RESUME irqs happen too, paired with SUSPEND.
@@ -492,7 +520,7 @@ static irqreturn_t musb_stage0_irq(struct musb *musb, u8 int_usb,
 						(USB_PORT_STAT_C_SUSPEND << 16)
 						| MUSB_PORT_STAT_RESUME;
 				musb->rh_timer = jiffies
-						+ msecs_to_jiffies(20);
+						+ msecs_to_jiffies(30);
 
 				musb->xceiv->state = OTG_STATE_A_HOST;
 				musb->is_active = 1;
@@ -987,6 +1015,11 @@ void musb_start(struct musb *musb)
 	}
 	musb_platform_enable(musb);
 	musb_writeb(regs, MUSB_DEVCTL, devctl);
+#if defined(CONFIG_PM) && defined(CONFIG_ARCH_U8500) \
+	&& !defined(CONFIG_UX500_SOC_DB5500)
+	musb_save_context(musb);
+	clk_disable(musb->clock);
+#endif
 }
 
 
@@ -995,6 +1028,10 @@ static void musb_generic_disable(struct musb *musb)
 	void __iomem	*mbase = musb->mregs;
 	u16	temp;
 
+#if defined(CONFIG_PM) && defined(CONFIG_ARCH_U8500) \
+	&& !defined(CONFIG_UX500_SOC_DB5500)
+	clk_enable(musb->clock);
+#endif
 	/* disable interrupts */
 	musb_writeb(mbase, MUSB_INTRUSBE, 0);
 	musb_writew(mbase, MUSB_INTRTXE, 0);
@@ -1008,6 +1045,10 @@ static void musb_generic_disable(struct musb *musb)
 	temp = musb_readw(mbase, MUSB_INTRTX);
 	temp = musb_readw(mbase, MUSB_INTRRX);
 
+#if defined(CONFIG_PM) && defined(CONFIG_ARCH_U8500) \
+	&& !defined(CONFIG_UX500_SOC_DB5500)
+	clk_disable(musb->clock);
+#endif
 }
 
 /*
@@ -1067,7 +1108,11 @@ static void musb_shutdown(struct platform_device *pdev)
 	|| defined(CONFIG_ARCH_OMAP4)
 static ushort __initdata fifo_mode = 4;
 #else
+#ifndef CONFIG_ARCH_U8500
 static ushort __initdata fifo_mode = 2;
+#else
+static ushort __initdata fifo_mode = 5;
+#endif
 #endif
 
 /* "modprobe ... fifo_mode=1" etc */
@@ -1148,10 +1193,17 @@ static struct musb_fifo_cfg __initdata mode_4_cfg[] = {
 { .hw_ep_num = 15, .style = FIFO_RXTX, .maxpacket = 1024, },
 };
 
-/* mode 5 - fits in 8KB */
+/* mode 5 - fits in 8KB
+ * 12 KB of FIFO available, dynamic FIFO sizing
+ * The FIFO for endpoint 0 is required to be 64 bytes deep and
+ * buffers one maximum-size packet.
+ * The RAM interface is configurable with regard to the other endpoint FIFOs,
+ * which may be from 8 to 8192 bytes in size and can buffer
+ * either 1 or 2 packets.
+*/
 static struct musb_fifo_cfg __initdata mode_5_cfg[] = {
-{ .hw_ep_num =  1, .style = FIFO_TX,   .maxpacket = 512, },
-{ .hw_ep_num =  1, .style = FIFO_RX,   .maxpacket = 512, },
+{ .hw_ep_num = 1, .style = FIFO_TX,   .maxpacket = 512, .mode = BUF_DOUBLE, },
+{ .hw_ep_num = 1, .style = FIFO_RX,   .maxpacket = 512, .mode = BUF_DOUBLE, },
 { .hw_ep_num =  2, .style = FIFO_TX,   .maxpacket = 512, },
 { .hw_ep_num =  2, .style = FIFO_RX,   .maxpacket = 512, },
 { .hw_ep_num =  3, .style = FIFO_TX,   .maxpacket = 512, },
@@ -1536,7 +1588,7 @@ static int __init musb_core_init(u16 musb_type, struct musb *musb)
 /*-------------------------------------------------------------------------*/
 
 #if defined(CONFIG_ARCH_OMAP2430) || defined(CONFIG_ARCH_OMAP3430) || \
-	defined(CONFIG_ARCH_OMAP4)
+	defined(CONFIG_ARCH_OMAP4) || defined(CONFIG_ARCH_U8500)
 
 static irqreturn_t generic_interrupt(int irq, void *__hci)
 {
@@ -1589,6 +1641,14 @@ irqreturn_t musb_interrupt(struct musb *musb)
 			DBG(5, "No gadget driver loaded\n");
 			return IRQ_HANDLED;
 		}
+#endif
+
+	/**
+	 * HACK for detecting the AX8817X series Ethernet over USB
+	 * Adapters for U8500 platform
+	 */
+#if (defined(CONFIG_ARCH_U8500) && defined(CONFIG_USB_NET_AX8817X))
+	mdelay(10);
 #endif
 
 	/* the core can interrupt us for multiple reasons; docs have
@@ -2417,26 +2477,42 @@ static int musb_suspend(struct device *dev)
 	spin_lock_irqsave(&musb->lock, flags);
 
 	if (is_peripheral_active(musb)) {
-		/* FIXME force disconnect unless we know USB will wake
+		/*
+		 * FIXME force disconnect unless we know USB will wake
 		 * the system up quickly enough to respond ...
+		 * For ux500 platform if usb is connected return busy
+		 * state
 		 */
+		if (musb->is_active == 1) {
+			spin_unlock_irqrestore(&musb->lock, flags);
+			return -EBUSY;
+		}
 	} else if (is_host_active(musb)) {
-		/* we know all the children are suspended; sometimes
+		/*
+		 *  we know all the children are suspended; sometimes
 		 * they will even be wakeup-enabled.
+		 * For ux500 platform if usb is connected return busy
+		 * state
 		 */
+		 if (musb->is_active == 1) {
+			spin_unlock_irqrestore(&musb->lock, flags);
+			return -EBUSY;
+		}
 	}
 
+#ifndef CONFIG_ARCH_U8500
 	musb_save_context(musb);
 
 	if (musb->set_clock)
 		musb->set_clock(musb->clock, 0);
 	else
 		clk_disable(musb->clock);
+#endif
 	spin_unlock_irqrestore(&musb->lock, flags);
 	return 0;
 }
 
-static int musb_resume_noirq(struct device *dev)
+static int musb_resume(struct device *dev)
 {
 	struct platform_device *pdev = to_platform_device(dev);
 	struct musb	*musb = dev_to_musb(&pdev->dev);
@@ -2444,12 +2520,14 @@ static int musb_resume_noirq(struct device *dev)
 	if (!musb->clock)
 		return 0;
 
+#ifndef CONFIG_ARCH_U8500
 	if (musb->set_clock)
 		musb->set_clock(musb->clock, 1);
 	else
 		clk_enable(musb->clock);
 
 	musb_restore_context(musb);
+#endif
 
 	/* for static cmos like DaVinci, register values were preserved
 	 * unless for some reason the whole soc powered down or the USB
@@ -2460,7 +2538,7 @@ static int musb_resume_noirq(struct device *dev)
 
 static const struct dev_pm_ops musb_dev_pm_ops = {
 	.suspend	= musb_suspend,
-	.resume_noirq	= musb_resume_noirq,
+	.resume		= musb_resume,
 };
 
 #define MUSB_DEV_PM_OPS (&musb_dev_pm_ops)
@@ -2513,10 +2591,18 @@ static int __init musb_init(void)
 	return platform_driver_probe(&musb_driver, musb_probe);
 }
 
+#ifndef CONFIG_ARCH_U8500
 /* make us init after usbcore and i2c (transceivers, regulators, etc)
  * and before usb gadget and host-side drivers start to register
  */
 fs_initcall(musb_init);
+#else
+/* with fs_initcall the dma controller driver was loaded after mentor IP
+ * driver so when DMA is enabled, it will break as DMA controller driver is
+ * not loaded. This has been done to correct the order
+ */
+module_init(musb_init);
+#endif
 
 static void __exit musb_cleanup(void)
 {

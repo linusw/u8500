@@ -50,6 +50,8 @@ source "drivers/i2c/Kconfig"
 
 source "drivers/spi/Kconfig"
 
+source "drivers/hsi/Kconfig"
+
 source "drivers/pps/Kconfig"
 
 source "drivers/gpio/Kconfig"
@@ -88,6 +90,8 @@ source "drivers/memstick/Kconfig"
 
 source "drivers/leds/Kconfig"
 
+source "drivers/switch/Kconfig"
+
 source "drivers/accessibility/Kconfig"
 
 source "drivers/infiniband/Kconfig"
@@ -111,4 +115,15 @@ source "drivers/xen/Kconfig"
 source "drivers/staging/Kconfig"
 
 source "drivers/platform/Kconfig"
+
+source "drivers/samsung/Kconfig"
+
+source "drivers/tee/Kconfig"
+
+source "drivers/sensor/Kconfig"
+
+source "drivers/phone_svn/Kconfig"
+
+source "drivers/startup_reason/Kconfig"
+
 endmenu

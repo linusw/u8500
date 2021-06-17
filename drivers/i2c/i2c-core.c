@@ -189,90 +189,60 @@ static int i2c_device_pm_suspend(struct device *dev)
 {
 	const struct dev_pm_ops *pm = dev->driver ? dev->driver->pm : NULL;
 
-	if (pm_runtime_suspended(dev))
-		return 0;
-
 	if (pm)
-		return pm->suspend ? pm->suspend(dev) : 0;
-
-	return i2c_legacy_suspend(dev, PMSG_SUSPEND);
+		return pm_generic_suspend(dev);
+	else
+		return i2c_legacy_suspend(dev, PMSG_SUSPEND);
 }
 
 static int i2c_device_pm_resume(struct device *dev)
 {
 	const struct dev_pm_ops *pm = dev->driver ? dev->driver->pm : NULL;
-	int ret;
 
 	if (pm)
-		ret = pm->resume ? pm->resume(dev) : 0;
+		return pm_generic_resume(dev);
 	else
-		ret = i2c_legacy_resume(dev);
-
-	if (!ret) {
-		pm_runtime_disable(dev);
-		pm_runtime_set_active(dev);
-		pm_runtime_enable(dev);
-	}
-
-	return ret;
+		return i2c_legacy_resume(dev);
 }
 
 static int i2c_device_pm_freeze(struct device *dev)
 {
 	const struct dev_pm_ops *pm = dev->driver ? dev->driver->pm : NULL;
 
-	if (pm_runtime_suspended(dev))
-		return 0;
-
 	if (pm)
-		return pm->freeze ? pm->freeze(dev) : 0;
-
-	return i2c_legacy_suspend(dev, PMSG_FREEZE);
+		return pm_generic_freeze(dev);
+	else
+		return i2c_legacy_suspend(dev, PMSG_FREEZE);
 }
 
 static int i2c_device_pm_thaw(struct device *dev)
 {
 	const struct dev_pm_ops *pm = dev->driver ? dev->driver->pm : NULL;
 
-	if (pm_runtime_suspended(dev))
-		return 0;
-
 	if (pm)
-		return pm->thaw ? pm->thaw(dev) : 0;
-
-	return i2c_legacy_resume(dev);
+		return pm_generic_thaw(dev);
+	else
+		return i2c_legacy_resume(dev);
 }
 
 static int i2c_device_pm_poweroff(struct device *dev)
 {
 	const struct dev_pm_ops *pm = dev->driver ? dev->driver->pm : NULL;
 
-	if (pm_runtime_suspended(dev))
-		return 0;
-
 	if (pm)
-		return pm->poweroff ? pm->poweroff(dev) : 0;
-
-	return i2c_legacy_suspend(dev, PMSG_HIBERNATE);
+		return pm_generic_poweroff(dev);
+	else
+		return i2c_legacy_suspend(dev, PMSG_HIBERNATE);
 }
 
 static int i2c_device_pm_restore(struct device *dev)
 {
 	const struct dev_pm_ops *pm = dev->driver ? dev->driver->pm : NULL;
-	int ret;
 
 	if (pm)
-		ret = pm->restore ? pm->restore(dev) : 0;
+		return pm_generic_restore(dev);
 	else
-		ret = i2c_legacy_resume(dev);
-
-	if (!ret) {
-		pm_runtime_disable(dev);
-		pm_runtime_set_active(dev);
-		pm_runtime_enable(dev);
-	}
-
-	return ret;
+		return i2c_legacy_resume(dev);
 }
 #else /* !CONFIG_PM_SLEEP */
 #define i2c_device_pm_suspend	NULL
@@ -1249,7 +1219,19 @@ int i2c_transfer(struct i2c_adapter *adap, struct i2c_msg *msgs, int num)
 		rt_mutex_unlock(&adap->bus_lock);
 
 		return ret;
-	} else {
+	}
+#ifdef CONFIG_SAMSUNG_PANIC_DISPLAY_DEVICES
+	else if (adap->algo->master_panic_xfer){
+		for (ret = 0, try = 0; try <= adap->retries; try++) {
+			ret = adap->algo->master_panic_xfer(adap, msgs, num);
+			if (ret != -EAGAIN)
+				break;
+		}
+
+		return ret;
+	}
+#endif
+	else {
 		dev_dbg(&adap->dev, "I2C level transfers not supported\n");
 		return -EOPNOTSUPP;
 	}

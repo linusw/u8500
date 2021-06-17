@@ -346,13 +346,15 @@ static void ixj_fsk_alloc(IXJ *j)
 		j->fskdata = kmalloc(8000, GFP_KERNEL);
 		if (!j->fskdata) {
 			if(ixjdebug & 0x0200) {
-				printk("IXJ phone%d - allocate failed\n", j->board);
+				printk(KERN_INFO "IXJ phone%d - allocate failed\n",
+						j->board);
 			}
 			return;
 		} else {
 			j->fsksize = 8000;
 			if(ixjdebug & 0x0200) {
-				printk("IXJ phone%d - allocate succeded\n", j->board);
+				printk(KERN_INFO "IXJ phone%d - allocate succeded\n",
+						j->board);
 			}
 		}
 	}
@@ -854,7 +856,7 @@ static inline void ixj_kill_fasync(IXJ *j, IXJ_SIGEVENT event, int dir)
 {
 	if(j->ixj_signals[event]) {
 		if(ixjdebug & 0x0100)
-			printk("Sending signal for event %d\n", event);
+			printk(KERN_INFO "Sending signal for event %d\n", event);
 			/* Send apps notice of change */
 		/* see config.h for macro definition */
 		kill_fasync(&(j->async_queue), j->ixj_signals[event], dir);
@@ -1103,9 +1105,9 @@ static void ixj_pstn_state(IXJ *j)
 			if((j->pstn_ring_int != 0 && time_after(jiffies, j->pstn_ring_int + (hertz * 5)) && !j->flags.pstn_rmr) ||
 			   (j->pstn_ring_stop != 0 && time_after(jiffies, j->pstn_ring_stop + (hertz * 5)))) {
 				if(ixjdebug & 0x0008) {
-					printk("IXJ DAA no ring in 5 seconds /dev/phone%d at %ld\n", j->board, jiffies);
-					printk("IXJ DAA pstn ring int /dev/phone%d at %ld\n", j->board, j->pstn_ring_int);
-					printk("IXJ DAA pstn ring stop /dev/phone%d at %ld\n", j->board, j->pstn_ring_stop);
+					printk(KERN_INFO "IXJ DAA no ring in 5 seconds /dev/phone%d at %ld\n", j->board, jiffies);
+					printk(KERN_INFO "IXJ DAA pstn ring int /dev/phone%d at %ld\n", j->board, j->pstn_ring_int);
+					printk(KERN_INFO "IXJ DAA pstn ring stop /dev/phone%d at %ld\n", j->board, j->pstn_ring_stop);
 				}
 				j->pstn_ring_stop = j->pstn_ring_int = 0;
 				daa_set_mode(j, SOP_PU_SLEEP);
@@ -1119,7 +1121,7 @@ static void ixj_pstn_state(IXJ *j)
 			}
 			if (daaint.bitreg.Cadence) {
 				if(ixjdebug & 0x0008) {
-					printk("IXJ DAA Cadence interrupt going to sleep /dev/phone%d\n", j->board);
+					printk(KERN_INFO "IXJ DAA Cadence interrupt going to sleep /dev/phone%d\n", j->board);
 				}
 				daa_set_mode(j, SOP_PU_SLEEP);
 				j->ex.bits.pstn_ring = 0;
@@ -1130,14 +1132,14 @@ static void ixj_pstn_state(IXJ *j)
 				if(!daaint.bitreg.SI_0) {
 					if (!j->pstn_winkstart) {
 						if(ixjdebug & 0x0008) {
-							printk("IXJ DAA possible wink /dev/phone%d %ld\n", j->board, jiffies);
+							printk(KERN_INFO "IXJ DAA possible wink /dev/phone%d %ld\n", j->board, jiffies);
 						}
 						j->pstn_winkstart = jiffies;
 					} 
 				} else {
 					if (j->pstn_winkstart) {
 						if(ixjdebug & 0x0008) {
-							printk("IXJ DAA possible wink end /dev/phone%d %ld\n", j->board, jiffies);
+							printk(KERN_INFO "IXJ DAA possible wink end /dev/phone%d %ld\n", j->board, jiffies);
 						}
 						j->pstn_winkstart = 0;
 					}
@@ -1145,7 +1147,7 @@ static void ixj_pstn_state(IXJ *j)
 			}
 			if (j->pstn_winkstart && time_after(jiffies, j->pstn_winkstart + ((hertz * j->winktime) / 1000))) {
 				if(ixjdebug & 0x0008) {
-					printk("IXJ DAA wink detected going to sleep /dev/phone%d %ld\n", j->board, jiffies);
+					printk(KERN_INFO "IXJ DAA wink detected going to sleep /dev/phone%d %ld\n", j->board, jiffies);
 				}
 				daa_set_mode(j, SOP_PU_SLEEP);
 				j->pstn_winkstart = 0;
@@ -1242,7 +1244,7 @@ static void ixj_timeout(unsigned long ptr)
 						j->cadence_f[5].on1dot = jiffies + (long)((j->cadence_f[5].on1 * (hertz * 100) / 10000));
 						if (time_before(jiffies, j->cadence_f[5].on1dot)) {
 							if(ixjdebug & 0x0004) {
-								printk("Ringing cadence state = %d - %ld\n", j->cadence_f[5].state, jiffies);
+								printk(KERN_INFO "Ringing cadence state = %d - %ld\n", j->cadence_f[5].state, jiffies);
 							}
 							ixj_ring_on(j);
 						}
@@ -1252,7 +1254,7 @@ static void ixj_timeout(unsigned long ptr)
 						if (time_after(jiffies, j->cadence_f[5].on1dot)) {
 							j->cadence_f[5].off1dot = jiffies + (long)((j->cadence_f[5].off1 * (hertz * 100) / 10000));
 							if(ixjdebug & 0x0004) {
-								printk("Ringing cadence state = %d - %ld\n", j->cadence_f[5].state, jiffies);
+								printk(KERN_INFO "Ringing cadence state = %d - %ld\n", j->cadence_f[5].state, jiffies);
 							}
 							ixj_ring_off(j);
 							j->cadence_f[5].state = 2;
@@ -1261,7 +1263,7 @@ static void ixj_timeout(unsigned long ptr)
 					case 2:
 						if (time_after(jiffies, j->cadence_f[5].off1dot)) {
 							if(ixjdebug & 0x0004) {
-								printk("Ringing cadence state = %d - %ld\n", j->cadence_f[5].state, jiffies);
+								printk(KERN_INFO "Ringing cadence state = %d - %ld\n", j->cadence_f[5].state, jiffies);
 							}
 							ixj_ring_on(j);
 							if (j->cadence_f[5].on2) {
@@ -1275,7 +1277,7 @@ static void ixj_timeout(unsigned long ptr)
 					case 3:
 						if (time_after(jiffies, j->cadence_f[5].on2dot)) {
 							if(ixjdebug & 0x0004) {
-								printk("Ringing cadence state = %d - %ld\n", j->cadence_f[5].state, jiffies);
+								printk(KERN_INFO "Ringing cadence state = %d - %ld\n", j->cadence_f[5].state, jiffies);
 							}
 							ixj_ring_off(j);
 							if (j->cadence_f[5].off2) {
@@ -1289,7 +1291,7 @@ static void ixj_timeout(unsigned long ptr)
 					case 4:
 						if (time_after(jiffies, j->cadence_f[5].off2dot)) {
 							if(ixjdebug & 0x0004) {
-								printk("Ringing cadence state = %d - %ld\n", j->cadence_f[5].state, jiffies);
+								printk(KERN_INFO "Ringing cadence state = %d - %ld\n", j->cadence_f[5].state, jiffies);
 							}
 							ixj_ring_on(j);
 							if (j->cadence_f[5].on3) {
@@ -1303,7 +1305,7 @@ static void ixj_timeout(unsigned long ptr)
 					case 5:
 						if (time_after(jiffies, j->cadence_f[5].on3dot)) {
 							if(ixjdebug & 0x0004) {
-								printk("Ringing cadence state = %d - %ld\n", j->cadence_f[5].state, jiffies);
+								printk(KERN_INFO "Ringing cadence state = %d - %ld\n", j->cadence_f[5].state, jiffies);
 							}
 							ixj_ring_off(j);
 							if (j->cadence_f[5].off3) {
@@ -1317,14 +1319,14 @@ static void ixj_timeout(unsigned long ptr)
 					case 6:
 						if (time_after(jiffies, j->cadence_f[5].off3dot)) {
 							if(ixjdebug & 0x0004) {
-								printk("Ringing cadence state = %d - %ld\n", j->cadence_f[5].state, jiffies);
+								printk(KERN_INFO "Ringing cadence state = %d - %ld\n", j->cadence_f[5].state, jiffies);
 							}
 							j->cadence_f[5].state = 7;
 						}
 						break;
 					case 7:
 						if(ixjdebug & 0x0004) {
-							printk("Ringing cadence state = %d - %ld\n", j->cadence_f[5].state, jiffies);
+							printk(KERN_INFO "Ringing cadence state = %d - %ld\n", j->cadence_f[5].state, jiffies);
 						}
 						j->flags.cidring = 1;
 						j->cadence_f[5].state = 0;
@@ -1445,7 +1447,7 @@ static int ixj_WriteDSPCommand(unsigned short cmd, IXJ *j)
 
 	atomic_inc(&j->DSPWrite);
 	if(atomic_read(&j->DSPWrite) > 1) {
-		printk("IXJ %d DSP write overlap attempting command 0x%4.4x\n", j->board, cmd);
+		printk(KERN_INFO "IXJ %d DSP write overlap attempting command 0x%4.4x\n", j->board, cmd);
 		return -1;
 	}
 	bytes.high = (cmd & 0xFF00) >> 8;
@@ -1457,7 +1459,7 @@ static int ixj_WriteDSPCommand(unsigned short cmd, IXJ *j)
 			ixj_perfmon(j->iscontrolreadyfail);
 			atomic_dec(&j->DSPWrite);
 			if(atomic_read(&j->DSPWrite) > 0) {
-				printk("IXJ %d DSP overlaped command 0x%4.4x during control ready failure.\n", j->board, cmd);
+				printk(KERN_INFO "IXJ %d DSP overlaped command 0x%4.4x during control ready failure.\n", j->board, cmd);
 				while(atomic_read(&j->DSPWrite) > 0) {
 					atomic_dec(&j->DSPWrite);
 				}
@@ -1473,7 +1475,7 @@ static int ixj_WriteDSPCommand(unsigned short cmd, IXJ *j)
 		j->ssr.high = 0xFF;
 		atomic_dec(&j->DSPWrite);
 		if(atomic_read(&j->DSPWrite) > 0) {
-			printk("IXJ %d DSP overlaped command 0x%4.4x during status wait failure.\n", j->board, cmd);
+			printk(KERN_INFO "IXJ %d DSP overlaped command 0x%4.4x during status wait failure.\n", j->board, cmd);
 			while(atomic_read(&j->DSPWrite) > 0) {
 				atomic_dec(&j->DSPWrite);
 			}
@@ -1485,7 +1487,7 @@ static int ixj_WriteDSPCommand(unsigned short cmd, IXJ *j)
 	j->ssr.high = inb_p(j->DSPbase + 3);
 	atomic_dec(&j->DSPWrite);
 	if(atomic_read(&j->DSPWrite) > 0) {
-		printk("IXJ %d DSP overlaped command 0x%4.4x\n", j->board, cmd);
+		printk(KERN_INFO "IXJ %d DSP overlaped command 0x%4.4x\n", j->board, cmd);
 		while(atomic_read(&j->DSPWrite) > 0) {
 			atomic_dec(&j->DSPWrite);
 		}
@@ -1939,7 +1941,7 @@ static int ixj_hookstate(IXJ *j)
 					j->checkwait = 0;
 				}
 				j->p_hook = fOffHook;
-	 			printk("IXJ : /dev/phone%d pots-pstn hookstate check %d at %ld\n", j->board, fOffHook, jiffies);
+	 			printk(KERN_INFO "IXJ : /dev/phone%d pots-pstn hookstate check %d at %ld\n", j->board, fOffHook, jiffies);
 			}
 		} else {
 			if (j->pld_slicr.bits.state == PLD_SLIC_STATE_ACTIVE ||
@@ -2635,7 +2637,7 @@ static int LineMonitor(IXJ *j)
 		}
 		else if(j->dtmf_current == 0x00 || j->dtmf_current == 0x0D) {
 			if(ixjdebug & 0x0020) {
-				printk("IXJ phone%d saw CIDCW Ack DTMF %d from display at %ld\n", j->board, j->dtmf_current, jiffies);
+				printk(KERN_INFO "IXJ phone%d saw CIDCW Ack DTMF %d from display at %ld\n", j->board, j->dtmf_current, jiffies);
 			}
 			j->flags.cidcw_ack = 1;
 		}
@@ -3147,7 +3149,7 @@ static void ixj_post_cid(IXJ *j)
 	}
 	j->flags.cidplay = 0;
 	if(ixjdebug & 0x0200) {
-		printk("IXJ phone%d Finished Playing CallerID data %ld\n", j->board, jiffies);
+		printk(KERN_INFO "IXJ phone%d Finished Playing CallerID data %ld\n", j->board, jiffies);
 	}
 
 	ixj_fsk_free(j);
@@ -3283,7 +3285,7 @@ static void ixj_write_cidcw(IXJ *j)
 	ixj_set_tone_on(1500, j);
 	ixj_set_tone_off(32, j);
 	if(ixjdebug & 0x0200) {
-		printk("IXJ cidcw phone%d first tone start at %ld\n", j->board, jiffies);
+		printk(KERN_INFO "IXJ cidcw phone%d first tone start at %ld\n", j->board, jiffies);
 	}
 	ixj_play_tone(j, 23);
 
@@ -3293,7 +3295,7 @@ static void ixj_write_cidcw(IXJ *j)
 	while(test_and_set_bit(j->board, (void *)&j->busyflags) != 0)
 		schedule_timeout_interruptible(1);
 	if(ixjdebug & 0x0200) {
-		printk("IXJ cidcw phone%d first tone end at %ld\n", j->board, jiffies);
+		printk(KERN_INFO "IXJ cidcw phone%d first tone end at %ld\n", j->board, jiffies);
 	}
 
 	ti.tone_index = 24;
@@ -3306,7 +3308,7 @@ static void ixj_write_cidcw(IXJ *j)
 	ixj_set_tone_off(10, j);
 	ixj_set_tone_on(600, j);
 	if(ixjdebug & 0x0200) {
-		printk("IXJ cidcw phone%d second tone start at %ld\n", j->board, jiffies);
+		printk(KERN_INFO "IXJ cidcw phone%d second tone start at %ld\n", j->board, jiffies);
 	}
 	ixj_play_tone(j, 24);
 
@@ -3316,7 +3318,7 @@ static void ixj_write_cidcw(IXJ *j)
 	while(test_and_set_bit(j->board, (void *)&j->busyflags) != 0)
 		schedule_timeout_interruptible(1);
 	if(ixjdebug & 0x0200) {
-		printk("IXJ cidcw phone%d sent second tone at %ld\n", j->board, jiffies);
+		printk(KERN_INFO "IXJ cidcw phone%d sent second tone at %ld\n", j->board, jiffies);
 	}
 
 	j->cidcw_wait = jiffies + ((50 * hertz) / 100);
@@ -3329,7 +3331,7 @@ static void ixj_write_cidcw(IXJ *j)
 	j->cidcw_wait = 0;
 	if(!j->flags.cidcw_ack) {
 		if(ixjdebug & 0x0200) {
-			printk("IXJ cidcw phone%d did not receive ACK from display %ld\n", j->board, jiffies);
+			printk(KERN_INFO "IXJ cidcw phone%d did not receive ACK from display %ld\n", j->board, jiffies);
 		}
 		ixj_post_cid(j);
 		if(j->cid_play_flag) {
@@ -3389,7 +3391,7 @@ static void ixj_write_cidcw(IXJ *j)
 	}
 	ixj_pad_fsk(j, pad);
 	if(ixjdebug & 0x0200) {
-		printk("IXJ cidcw phone%d sent FSK data at %ld\n", j->board, jiffies);
+		printk(KERN_INFO "IXJ cidcw phone%d sent FSK data at %ld\n", j->board, jiffies);
 	}
 }
 
@@ -3872,7 +3874,7 @@ static int ixj_record_start(IXJ *j)
 	ixj_WriteDSPCommand(0x0FE0, j);	/* Put the DSP in full power mode. */
 
 	if(ixjdebug & 0x0002)
-		printk("IXJ %d Starting Record Codec %d at %ld\n", j->board, j->rec_codec, jiffies);
+		printk(KERN_INFO "IXJ %d Starting Record Codec %d at %ld\n", j->board, j->rec_codec, jiffies);
 
 	if (!j->rec_mode) {
 		switch (j->rec_codec) {
@@ -3911,7 +3913,7 @@ static int ixj_record_start(IXJ *j)
 		if (!j->read_buffer)
 			j->read_buffer = kmalloc(j->rec_frame_size * 2, GFP_ATOMIC);
 		if (!j->read_buffer) {
-			printk("Read buffer allocation for ixj board %d failed!\n", j->board);
+			printk(KERN_INFO "Read buffer allocation for ixj board %d failed!\n", j->board);
 			return -ENOMEM;
 		}
 	}
@@ -3973,7 +3975,7 @@ static int ixj_record_start(IXJ *j)
 static void ixj_record_stop(IXJ *j)
 {
 	if (ixjdebug & 0x0002)
-		printk("IXJ %d Stopping Record Codec %d at %ld\n", j->board, j->rec_codec, jiffies);
+		printk(KERN_INFO "IXJ %d Stopping Record Codec %d at %ld\n", j->board, j->rec_codec, jiffies);
 
 	kfree(j->read_buffer);
 	j->read_buffer = NULL;
@@ -4448,7 +4450,7 @@ static int ixj_play_start(IXJ *j)
 	}
 
 	if(ixjdebug & 0x0002)
-		printk("IXJ %d Starting Play Codec %d at %ld\n", j->board, j->play_codec, jiffies);
+		printk(KERN_INFO "IXJ %d Starting Play Codec %d at %ld\n", j->board, j->play_codec, jiffies);
 
 	j->flags.playing = 1;
 	ixj_WriteDSPCommand(0x0FE0, j);	/* Put the DSP in full power mode. */
@@ -4491,7 +4493,7 @@ static int ixj_play_start(IXJ *j)
 	}
 	j->write_buffer = kmalloc(j->play_frame_size * 2, GFP_ATOMIC);
 	if (!j->write_buffer) {
-		printk("Write buffer allocation for ixj board %d failed!\n", j->board);
+		printk(KERN_INFO "Write buffer allocation for ixj board %d failed!\n", j->board);
 		return -ENOMEM;
 	}
 /*	j->write_buffers_empty = 2; */
@@ -4556,7 +4558,7 @@ static int ixj_play_start(IXJ *j)
 static void ixj_play_stop(IXJ *j)
 {
 	if (ixjdebug & 0x0002)
-		printk("IXJ %d Stopping Play Codec %d at %ld\n", j->board, j->play_codec, jiffies);
+		printk(KERN_INFO "IXJ %d Stopping Play Codec %d at %ld\n", j->board, j->play_codec, jiffies);
 
 	kfree(j->write_buffer);
 	j->write_buffer = NULL;
@@ -4600,7 +4602,7 @@ static int ixj_play_tone(IXJ *j, char tone)
 {
 	if (!j->tone_state) {
 		if(ixjdebug & 0x0002) {
-			printk("IXJ %d starting tone %d at %ld\n", j->board, tone, jiffies);
+			printk(KERN_INFO "IXJ %d starting tone %d at %ld\n", j->board, tone, jiffies);
 		}
 		if (j->dsp.low == 0x20) {
 			idle(j);
@@ -4835,7 +4837,7 @@ static char daa_int_read(IXJ *j)
 	bytes.low = inb_p(j->XILINXbase + 0x02);
 	if (bytes.low != ALISDAA_ID_BYTE) {
 		if (ixjdebug & 0x0001)
-			printk("Cannot read DAA ID Byte high = %d low = %d\n", bytes.high, bytes.low);
+			printk(KERN_INFO "Cannot read DAA ID Byte high = %d low = %d\n", bytes.high, bytes.low);
 		return 0;
 	}
 	if (!SCI_Control(j, SCI_Enable_DAA))
@@ -4887,7 +4889,7 @@ static char daa_CR_read(IXJ *j, int cr)
 	bytes.low = inb_p(j->XILINXbase + 0x02);
 	if (bytes.low != ALISDAA_ID_BYTE) {
 		if (ixjdebug & 0x0001)
-			printk("Cannot read DAA ID Byte high = %d low = %d\n", bytes.high, bytes.low);
+			printk(KERN_INFO "Cannot read DAA ID Byte high = %d low = %d\n", bytes.high, bytes.low);
 		return 0;
 	}
 	if (!SCI_Control(j, SCI_Enable_DAA))
@@ -4928,7 +4930,7 @@ static int ixj_daa_cid_reset(IXJ *j)
 	BYTES bytes;
 
 	if (ixjdebug & 0x0002)
-		printk("DAA Clearing CID ram\n");
+		printk(KERN_INFO "DAA Clearing CID ram\n");
 
 	if (!SCI_Prepare(j))
 		return 0;
@@ -4963,7 +4965,7 @@ static int ixj_daa_cid_reset(IXJ *j)
 		return 0;
 
 	if (ixjdebug & 0x0002)
-		printk("DAA CID ram cleared\n");
+		printk(KERN_INFO "DAA CID ram cleared\n");
 
 	return 1;
 }
@@ -4994,7 +4996,7 @@ static int ixj_daa_cid_read(IXJ *j)
 	bytes.low = inb_p(j->XILINXbase + 0x02);
 	if (bytes.low != ALISDAA_ID_BYTE) {
 		if (ixjdebug & 0x0001)
-			printk("DAA Get Version Cannot read DAA ID Byte high = %d low = %d\n", bytes.high, bytes.low);
+			printk(KERN_INFO "DAA Get Version Cannot read DAA ID Byte high = %d low = %d\n", bytes.high, bytes.low);
 		return 0;
 	}
 	for (i = 0; i < ALISDAA_CALLERID_SIZE; i += 2) {
@@ -5077,7 +5079,7 @@ static char daa_get_version(IXJ *j)
 	bytes.low = inb_p(j->XILINXbase + 0x02);
 	if (bytes.low != ALISDAA_ID_BYTE) {
 		if (ixjdebug & 0x0001)
-			printk("DAA Get Version Cannot read DAA ID Byte high = %d low = %d\n", bytes.high, bytes.low);
+			printk(KERN_INFO "DAA Get Version Cannot read DAA ID Byte high = %d low = %d\n", bytes.high, bytes.low);
 		return 0;
 	}
 	if (!SCI_Control(j, SCI_Enable_DAA))
@@ -5089,7 +5091,7 @@ static char daa_get_version(IXJ *j)
 	bytes.high = inb_p(j->XILINXbase + 0x03);
 	bytes.low = inb_p(j->XILINXbase + 0x02);
 	if (ixjdebug & 0x0002)
-		printk("DAA CR5 Byte high = 0x%x low = 0x%x\n", bytes.high, bytes.low);
+		printk(KERN_INFO "DAA CR5 Byte high = 0x%x low = 0x%x\n", bytes.high, bytes.low);
 	j->m_DAAShadowRegs.SOP_REGS.SOP.cr5.reg = bytes.high;
 	return bytes.high;
 }
@@ -5718,7 +5720,7 @@ static int ixj_daa_write(IXJ *j)
 	outb_p(j->pld_scrw.byte, j->XILINXbase);
 
 	if (ixjdebug & 0x0002)
-		printk("DAA Coefficients Loaded\n");
+		printk(KERN_INFO "DAA Coefficients Loaded\n");
 
 	j->flags.pstncheck = 0;
 	return 1;
@@ -6108,7 +6110,7 @@ static long do_ixj_ioctl(struct file *file_p, unsigned int cmd, unsigned long ar
 	while(test_and_set_bit(board, (void *)&j->busyflags) != 0)
 		schedule_timeout_interruptible(1);
 	if (ixjdebug & 0x0040)
-		printk("phone%d ioctl, cmd: 0x%x, arg: 0x%lx\n", minor, cmd, arg);
+		printk(KERN_INFO "phone%d ioctl, cmd: 0x%x, arg: 0x%lx\n", minor, cmd, arg);
 	if (minor >= IXJMAX) {
 		clear_bit(board, &j->busyflags);
 		return -ENODEV;
@@ -6647,7 +6649,7 @@ static long do_ixj_ioctl(struct file *file_p, unsigned int cmd, unsigned long ar
 		break;
 	}
 	if (ixjdebug & 0x0040)
-		printk("phone%d ioctl end, cmd: 0x%x, arg: 0x%lx\n", minor, cmd, arg);
+		printk(KERN_INFO "phone%d ioctl end, cmd: 0x%x, arg: 0x%lx\n", minor, cmd, arg);
 	clear_bit(board, &j->busyflags);
 	return retval;
 }
@@ -6919,14 +6921,14 @@ static int ixj_selfprobe(IXJ *j)
 			LED_SetState(0x0, j);
 			daa_get_version(j);
 			if (ixjdebug & 0x0002)
-				printk("Loading DAA Coefficients\n");
+				printk(KERN_INFO "Loading DAA Coefficients\n");
 			DAA_Coeff_US(j);
 			if (!ixj_daa_write(j)) {
-				printk("DAA write failed on board %d\n", j->board);
+				printk(KERN_INFO "DAA write failed on board %d\n", j->board);
 				return -1;
 			}
 			if(!ixj_daa_cid_reset(j)) {
-				printk("DAA CID reset failed on board %d\n", j->board);
+				printk(KERN_INFO "DAA CID reset failed on board %d\n", j->board);
 				return -1;
 			}
 			j->flags.pots_correct = 0;
@@ -7604,11 +7606,11 @@ static int __init ixj_probe_isapnp(int *cnt)
 				break;
 			result = pnp_device_attach(dev);
 			if (result < 0) {
-				printk("pnp attach failed %d \n", result);
+				printk(KERN_INFO "pnp attach failed %d \n", result);
 				break;
 			}
 			if (pnp_activate_dev(dev) < 0) {
-				printk("pnp activate failed (out of resources?)\n");
+				printk(KERN_INFO "pnp activate failed (out of resources?)\n");
 				pnp_device_detach(dev);
 				return -ENOMEM;
 			}

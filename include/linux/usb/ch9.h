@@ -125,6 +125,12 @@
 
 #define USB_ENDPOINT_HALT		0	/* IN/OUT will STALL */
 
+#ifdef CONFIG_USB_OTG_20
+/* OTG 2.0 spec 6.2 and 6.3 sections */
+#define OTG_STATUS_SELECTOR            0xF000
+#define THOST_REQ_POLL                 1500    /* 1000 - 2000 msec */
+#define HOST_REQUEST_FLAG              0
+#endif
 
 /**
  * struct usb_ctrlrequest - SETUP data for a USB device control request
@@ -585,13 +591,20 @@ struct usb_otg_descriptor {
 	__u8  bLength;
 	__u8  bDescriptorType;
 
+#ifndef CONFIG_USB_OTG_20
 	__u8  bmAttributes;	/* support for HNP, SRP, etc */
+#else
+	__u8  bmAttributes;     /* support for HNP, SRP, ADP etc */
+	__le16 bcdOTG;
+#endif
 } __attribute__ ((packed));
 
 /* from usb_otg_descriptor.bmAttributes */
 #define USB_OTG_SRP		(1 << 0)
 #define USB_OTG_HNP		(1 << 1)	/* swap host/device roles */
-
+#ifdef CONFIG_USB_OTG_20
+#define USB_OTG_ADP            (1 << 2)        /* Attach detection protocol*/
+#endif
 /*-------------------------------------------------------------------------*/
 
 /* USB_DT_DEBUG:  for special highspeed devices, replacing serial console */
@@ -807,5 +820,15 @@ enum usb_device_state {
 	 * suspend states.  (L2 being original USB 1.1 suspend.)
 	 */
 };
+
+/*-------------------------------------------------------------------------*/
+
+/*
+ * As per USB compliance update, a device that is actively drawing
+ * more than 100mA from USB must report itself as bus-powered in
+ * the GetStatus(DEVICE) call.
+ * http://compliance.usb.org/index.asp?UpdateFile=Electrical&Format=Standard#34
+ */
+#define USB_SELF_POWER_VBUS_MAX_DRAW		100
 
 #endif /* __LINUX_USB_CH9_H */

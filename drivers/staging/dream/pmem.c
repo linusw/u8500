@@ -341,7 +341,7 @@ static int pmem_open(struct inode *inode, struct file *file)
 		return -1;
 	data = kmalloc(sizeof(struct pmem_data), GFP_KERNEL);
 	if (!data) {
-		printk("pmem: unable to allocate memory for pmem metadata.");
+		printk(KERN_INFO "pmem: unable to allocate memory for pmem metadata.");
 		return -1;
 	}
 	data->flags = 0;
@@ -421,7 +421,7 @@ static int pmem_allocate(int id, unsigned long len)
 	 * return an error
 	 */
 	if (best_fit < 0) {
-		printk("pmem: no space left to allocate!\n");
+		printk(KERN_INFO "pmem: no space left to allocate!\n");
 		return -1;
 	}
 
@@ -615,7 +615,7 @@ static int pmem_mmap(struct file *file, struct vm_area_struct *vma)
 	/* either no space was available or an error occured */
 	if (!has_allocation(file)) {
 		ret = -EINVAL;
-		printk("pmem: could not find allocation for map.\n");
+		printk(KERN_INFO "pmem: could not find allocation for map.\n");
 		goto error;
 	}
 
@@ -636,7 +636,7 @@ static int pmem_mmap(struct file *file, struct vm_area_struct *vma)
 		struct pmem_region_node *region_node;
 		struct list_head *elt;
 		if (pmem_map_garbage(id, vma, data, 0, vma_size)) {
-			printk("pmem: mmap failed in kernel!\n");
+			printk(KERN_INFO "pmem: mmap failed in kernel!\n");
 			ret = -EAGAIN;
 			goto error;
 		}
@@ -770,7 +770,7 @@ void put_pmem_file(struct file *file)
 #if PMEM_DEBUG
 	down_write(&data->sem);
 	if (data->ref == 0) {
-		printk("pmem: pmem_put > pmem_get %s (pid %d)\n",
+		printk(KERN_INFO "pmem: pmem_put > pmem_get %s (pid %d)\n",
 		       pmem[id].dev.name, data->pid);
 		BUG();
 	}
@@ -954,7 +954,7 @@ int pmem_remap(struct pmem_region *region, struct file *file,
 	 * that back in it */
 	if (!is_master_owner(file)) {
 #if PMEM_DEBUG
-		printk("pmem: remap requested from non-master process\n");
+		printk(KERN_INFO "pmem: remap requested from non-master process\n");
 #endif
 		ret = -EINVAL;
 		goto err;
@@ -998,7 +998,7 @@ int pmem_remap(struct pmem_region *region, struct file *file,
 		}
 		if (!found) {
 #if PMEM_DEBUG
-			printk("pmem: Unmap region does not map any mapped "
+			printk(KERN_INFO "pmem: Unmap region does not map any mapped "
 				"region!");
 #endif
 			ret = -EINVAL;

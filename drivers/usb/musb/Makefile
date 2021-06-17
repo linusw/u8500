@@ -26,6 +26,10 @@ ifeq ($(CONFIG_ARCH_OMAP4),y)
 	musb_hdrc-objs  += omap2430.o
 endif
 
+ifeq ($(CONFIG_ARCH_U8500),y)
+	musb_hdrc-objs  += stm_musb.o
+endif
+
 ifeq ($(CONFIG_BF54x),y)
 	musb_hdrc-objs	+= blackfin.o
 endif
@@ -67,6 +71,7 @@ ifneq ($(CONFIG_MUSB_PIO_ONLY),y)
       endif
     endif
   endif
+  musb_hdrc-objs  += stm_musb_dma.o
 endif
 
 

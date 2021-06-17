@@ -206,4 +206,8 @@ int regulator_mode_to_status(unsigned int);
 
 void *regulator_get_init_drvdata(struct regulator_init_data *reg_init_data);
 
+#ifdef CONFIG_SAMSUNG_PANIC_DISPLAY_DEVICES
+struct list_head *regulator_regulator_map_list(void);
+#endif
+
 #endif

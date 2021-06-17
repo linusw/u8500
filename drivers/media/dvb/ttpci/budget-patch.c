@@ -362,14 +362,14 @@ static void frontend_init(struct budget_patch* budget)
 	}
 
 	if (budget->dvb_frontend == NULL) {
-		printk("dvb-ttpci: A frontend driver was not found for device [%04x:%04x] subsystem [%04x:%04x]\n",
+		printk(KERN_INFO "dvb-ttpci: A frontend driver was not found for device [%04x:%04x] subsystem [%04x:%04x]\n",
 		       budget->dev->pci->vendor,
 		       budget->dev->pci->device,
 		       budget->dev->pci->subsystem_vendor,
 		       budget->dev->pci->subsystem_device);
 	} else {
 		if (dvb_register_frontend(&budget->dvb_adapter, budget->dvb_frontend)) {
-			printk("budget-av: Frontend registration failed!\n");
+			printk(KERN_INFO "budget-av: Frontend registration failed!\n");
 			dvb_frontend_detach(budget->dvb_frontend);
 			budget->dvb_frontend = NULL;
 		}
@@ -476,17 +476,17 @@ static int budget_patch_attach (struct saa7146_dev* dev, struct saa7146_pci_exte
 		detected = 1;
 
 #if RPS_IRQ
-	printk("Event Counter 1 0x%04x\n", saa7146_read(dev, EC1R) & 0x3fff );
+	printk(KERN_INFO "Event Counter 1 0x%04x\n", saa7146_read(dev, EC1R) & 0x3fff);
 #endif
 	// Disable RPS1
 	saa7146_write(dev, MC1, ( MASK_29 ));
 
 	if(detected == 0)
-		printk("budget-patch not detected or saa7146 in non-default state.\n"
+		printk(KERN_INFO "budget-patch not detected or saa7146 in non-default state.\n"
 		       "try enabling ressetting of 7146 with MASK_31 in MC1 register\n");
 
 	else
-		printk("BUDGET-PATCH DETECTED.\n");
+		printk(KERN_INFO "BUDGET-PATCH DETECTED.\n");
 
 
 /*      OLD (Original design by Roberto Deza):

@@ -266,9 +266,9 @@ static void cafe_nand_cmdfunc(struct mtd_info *mtd, unsigned command,
 
 	if (unlikely(regdebug)) {
 		int i;
-		printk("About to write command %08x to register 0\n", ctl1);
+		printk(KERN_INFO "About to write command %08x to register 0\n", ctl1);
 		for (i=4; i< 0x5c; i+=4)
-			printk("Register %x: %08x\n", i, readl(cafe->mmio + i));
+			printk(KERN_INFO "Register %x: %08x\n", i, readl(cafe->mmio + i));
 	}
 
 	cafe_writel(cafe, ctl1, NAND_CTRL1);
@@ -446,7 +446,7 @@ static int cafe_nand_read_page(struct mtd_info *mtd, struct nand_chip *chip,
 			dev_dbg(&cafe->pdev->dev, "Failed to correct ECC at %08x\n",
 				cafe_readl(cafe, NAND_ADDR2) * 2048);
 			for (i = 0; i < 0x5c; i += 4)
-				printk("Register %x: %08x\n", i, readl(cafe->mmio + i));
+				printk(KERN_INFO "Register %x: %08x\n", i, readl(cafe->mmio + i));
 			mtd->ecc_stats.failed++;
 		} else {
 			dev_dbg(&cafe->pdev->dev, "Corrected %d symbol errors\n", n);

@@ -15,6 +15,8 @@
 #include <linux/syscalls.h>
 #include <linux/freezer.h>
 #include <linux/delay.h>
+#include <linux/wakelock.h>
+#include "power.h"
 
 /* 
  * Timeout for stopping processes
@@ -38,6 +40,7 @@ static int try_to_freeze_tasks(bool sig_only)
 	struct timeval start, end;
 	u64 elapsed_csecs64;
 	unsigned int elapsed_csecs;
+	unsigned int wakeup = 0;
 
 	do_gettimeofday(&start);
 
@@ -63,6 +66,10 @@ static int try_to_freeze_tasks(bool sig_only)
 				todo++;
 		} while_each_thread(g, p);
 		read_unlock(&tasklist_lock);
+		if (todo && has_wake_lock(WAKE_LOCK_SUSPEND)) {
+			wakeup = 1;
+			break;
+		}
 		if (!todo || time_after(jiffies, end_time))
 			break;
 
@@ -84,14 +91,22 @@ static int try_to_freeze_tasks(bool sig_only)
 		 * and caller must call thaw_processes() if something fails),
 		 * but it cleans up leftover PF_FREEZE requests.
 		 */
-		printk("\n");
-		printk(KERN_ERR "Freezing of tasks failed after %d.%02d seconds "
-				"(%d tasks refusing to freeze):\n",
-				elapsed_csecs / 100, elapsed_csecs % 100, todo);
+		if(wakeup) {
+			printk("\n");
+			printk(KERN_ERR "Freezing of %s aborted\n",
+					sig_only ? "user space " : "tasks ");
+		}
+		else {
+			printk("\n");
+			printk(KERN_ERR "Freezing of tasks failed after %d.%02d seconds "
+					"(%d tasks refusing to freeze):\n",
+					elapsed_csecs / 100, elapsed_csecs % 100, todo);
+		}
 		read_lock(&tasklist_lock);
 		do_each_thread(g, p) {
 			task_lock(p);
-			if (freezing(p) && !freezer_should_skip(p))
+			if (freezing(p) && !freezer_should_skip(p) &&
+				elapsed_csecs > 100)
 				sched_show_task(p);
 			cancel_freezing(p);
 			task_unlock(p);
@@ -117,6 +132,10 @@ int freeze_processes(void)
 	if (error)
 		goto Exit;
 	printk("done.\n");
+
+	error = suspend_sys_sync_wait();
+	if (error)
+		goto Exit;
 
 	printk("Freezing remaining freezable tasks ... ");
 	error = try_to_freeze_tasks(false);

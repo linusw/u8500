@@ -1,10 +1,8 @@
 /*
- * driver/dma/ste_dma40_ll.h
- *
- * Copyright (C) ST-Ericsson 2007-2010
+ * Copyright (C) ST-Ericsson SA 2007-2010
+ * Author: Per Friden <per.friden@stericsson.com> for ST-Ericsson SA
+ * Author: Jonas Aaberg <jonas.aberg@stericsson.com> for ST-Ericsson SA
  * License terms: GNU General Public License (GPL) version 2
- * Author: Per Friden <per.friden@stericsson.com>
- * Author: Jonas Aaberg <jonas.aberg@stericsson.com>
  */
 #ifndef STE_DMA40_LL_H
 #define STE_DMA40_LL_H
@@ -13,8 +11,13 @@
 #define D40_DREG_PCDELTA	(8 * 4)
 #define D40_LLI_ALIGN		16 /* LLI alignment must be 16 bytes. */
 
+#define D40_LCPA_CHAN_SIZE 32
+#define D40_LCPA_CHAN_DST_DELTA 16
+
 #define D40_TYPE_TO_GROUP(type) (type / 16)
 #define D40_TYPE_TO_EVENT(type) (type % 16)
+#define D40_GROUP_SIZE 8
+#define D40_PHYS_TO_GROUP(phys) ((phys & (D40_GROUP_SIZE - 1)) / 2)
 
 /* Most bits of the CFG register are the same in log as in phy mode */
 #define D40_SREG_CFG_MST_POS		15
@@ -93,10 +96,13 @@
 
 /* LCSP2 */
 #define D40_MEM_LCSP2_ECNT_POS		16
+#define D40_MEM_LCSP2_DPTR_POS		 0
 
 #define D40_MEM_LCSP2_ECNT_MASK		(0xFFFF << D40_MEM_LCSP2_ECNT_POS)
+#define D40_MEM_LCSP2_DPTR_MASK		(0xFFFF << D40_MEM_LCSP2_DPTR_POS)
 
 /* LCSP3 */
+#define D40_MEM_LCSP3_DPTR_POS		16
 #define D40_MEM_LCSP3_DCFG_MST_POS	15
 #define D40_MEM_LCSP3_DCFG_TIM_POS	14
 #define D40_MEM_LCSP3_DCFG_EIM_POS	13
@@ -106,6 +112,7 @@
 #define D40_MEM_LCSP3_DLOS_POS		 1
 #define D40_MEM_LCSP3_DTCP_POS		 0
 
+#define D40_MEM_LCSP3_DPTR_MASK		(0xFFFF << D40_MEM_LCSP3_DPTR_POS)
 #define D40_MEM_LCSP3_DLOS_MASK		(0x7F << D40_MEM_LCSP3_DLOS_POS)
 #define D40_MEM_LCSP3_DTCP_MASK		(0x1 << D40_MEM_LCSP3_DTCP_POS)
 
@@ -122,13 +129,32 @@
 
 /* DMA Register Offsets */
 #define D40_DREG_GCC		0x000
+#define D40_DREG_GCC_ENA	0x1
+/* This assumes that there are only 4 event groups */
+#define D40_DREG_GCC_ENABLE_ALL	0xff01
+#define D40_DREG_GCC_EVTGRP_POS 8
+#define D40_DREG_GCC_SRC 0
+#define D40_DREG_GCC_DST 1
+#define D40_DREG_GCC_EVTGRP_ENA(x, y) \
+	(1 << (D40_DREG_GCC_EVTGRP_POS + 2 * x + y))
+
 #define D40_DREG_PRTYP		0x004
 #define D40_DREG_PRSME		0x008
 #define D40_DREG_PRSMO		0x00C
+#define D40_DREG_PRSM_MODE_MASK		0x3
+#define D40_DREG_PRSM_MODE_SECURE	0x1
+
 #define D40_DREG_PRMSE		0x010
 #define D40_DREG_PRMSO		0x014
 #define D40_DREG_PRMOE		0x018
 #define D40_DREG_PRMOO		0x01C
+#define D40_DREG_PRMO_PCHAN_BASIC		0x1
+#define D40_DREG_PRMO_PCHAN_MODULO		0x2
+#define D40_DREG_PRMO_PCHAN_DOUBLE_DST		0x3
+#define D40_DREG_PRMO_LCHAN_SRC_PHY_DST_LOG	0x1
+#define D40_DREG_PRMO_LCHAN_SRC_LOG_DST_PHY	0x2
+#define D40_DREG_PRMO_LCHAN_SRC_LOG_DST_LOG	0x3
+
 #define D40_DREG_LCPA		0x020
 #define D40_DREG_LCLA		0x024
 #define D40_DREG_ACTIVE		0x050
@@ -155,6 +181,22 @@
 #define D40_DREG_LCEIS1		0x0B4
 #define D40_DREG_LCEIS2		0x0B8
 #define D40_DREG_LCEIS3		0x0BC
+#define D40_DREG_PSEG1		0x110
+#define D40_DREG_PSEG2		0x114
+#define D40_DREG_PSEG3		0x118
+#define D40_DREG_PSEG4		0x11C
+#define D40_DREG_PCEG1		0x120
+#define D40_DREG_PCEG2		0x124
+#define D40_DREG_PCEG3		0x128
+#define D40_DREG_PCEG4		0x12C
+#define D40_DREG_RSEG1		0x130
+#define D40_DREG_RSEG2		0x134
+#define D40_DREG_RSEG3		0x138
+#define D40_DREG_RSEG4		0x13C
+#define D40_DREG_RCEG1		0x140
+#define D40_DREG_RCEG2		0x144
+#define D40_DREG_RCEG3		0x148
+#define D40_DREG_RCEG4		0x14C
 #define D40_DREG_STFU		0xFC8
 #define D40_DREG_ICFG		0xFCC
 #define D40_DREG_PERIPHID0	0xFE0
@@ -196,8 +238,6 @@ struct d40_phy_lli {
  *
  * @src: Register settings for src channel.
  * @dst: Register settings for dst channel.
- * @dst_addr: Physical destination address.
- * @src_addr: Physical source address.
  *
  * All DMA transfers have a source and a destination.
  */
@@ -205,8 +245,6 @@ struct d40_phy_lli {
 struct d40_phy_lli_bidir {
 	struct d40_phy_lli	*src;
 	struct d40_phy_lli	*dst;
-	dma_addr_t		 dst_addr;
-	dma_addr_t		 src_addr;
 };
 
 
@@ -268,29 +306,16 @@ struct d40_def_lcsp {
 	u32 lcsp1;
 };
 
-/**
- * struct d40_lcla_elem - Info for one LCA element.
- *
- * @src_id: logical channel src id
- * @dst_id: logical channel dst id
- * @src: LCPA formated src parameters
- * @dst: LCPA formated dst parameters
- *
- */
-struct d40_lcla_elem {
-	int			src_id;
-	int			dst_id;
-	struct d40_log_lli     *src;
-	struct d40_log_lli     *dst;
-};
-
 /* Physical channels */
 
 void d40_phy_cfg(struct stedma40_chan_cfg *cfg,
-		 u32 *src_cfg, u32 *dst_cfg, bool is_log);
+		 u32 *src_cfg,
+		 u32 *dst_cfg,
+		 bool is_log);
 
 void d40_log_cfg(struct stedma40_chan_cfg *cfg,
-		 u32 *lcsp1, u32 *lcsp2);
+		 u32 *lcsp1,
+		 u32 *lcsp2);
 
 int d40_phy_sg_to_lli(struct scatterlist *sg,
 		      int sg_len,
@@ -300,7 +325,8 @@ int d40_phy_sg_to_lli(struct scatterlist *sg,
 		      u32 reg_cfg,
 		      u32 data_width,
 		      int psize,
-		      bool term_int);
+		      bool cyclic,
+		      bool cyclic_int);
 
 int d40_phy_fill_lli(struct d40_phy_lli *lli,
 		     dma_addr_t data,
@@ -320,35 +346,35 @@ void d40_phy_lli_write(void __iomem *virtbase,
 /* Logical channels */
 
 void d40_log_fill_lli(struct d40_log_lli *lli,
-		      dma_addr_t data, u32 data_size,
-		      u32 lli_next_off, u32 reg_cfg,
+		      dma_addr_t data,
+		      u32 data_size,
+		      u32 reg_cfg,
 		      u32 data_width,
-		      bool term_int, bool addr_inc);
+		      bool addr_inc);
 
-int d40_log_sg_to_dev(struct d40_lcla_elem *lcla,
-		      struct scatterlist *sg,
+int d40_log_sg_to_dev(struct scatterlist *sg,
 		      int sg_len,
 		      struct d40_log_lli_bidir *lli,
 		      struct d40_def_lcsp *lcsp,
 		      u32 src_data_width,
 		      u32 dst_data_width,
 		      enum dma_data_direction direction,
-		      bool term_int, dma_addr_t dev_addr, int max_len,
-		      int llis_per_log);
+		      dma_addr_t dev_addr);
 
-void d40_log_lli_write(struct d40_log_lli_full *lcpa,
-		       struct d40_log_lli *lcla_src,
-		       struct d40_log_lli *lcla_dst,
-		       struct d40_log_lli *lli_dst,
-		       struct d40_log_lli *lli_src,
-		       int llis_per_log);
-
-int d40_log_sg_to_lli(int lcla_id,
-		      struct scatterlist *sg,
+int d40_log_sg_to_lli(struct scatterlist *sg,
 		      int sg_len,
 		      struct d40_log_lli *lli_sg,
 		      u32 lcsp13, /* src or dst*/
-		      u32 data_width,
-		      bool term_int, int max_len, int llis_per_log);
+		      u32 data_width);
+
+void d40_log_lli_lcpa_write(struct d40_log_lli_full *lcpa,
+			    struct d40_log_lli *lli_dst,
+			    struct d40_log_lli *lli_src,
+			    int next, bool interrupt);
+
+void d40_log_lli_lcla_write(struct d40_log_lli *lcla,
+			    struct d40_log_lli *lli_dst,
+			    struct d40_log_lli *lli_src,
+			    int next, bool interrupt);
 
 #endif /* STE_DMA40_LLI_H */

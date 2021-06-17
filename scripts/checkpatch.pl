@@ -1299,7 +1299,11 @@ sub process {
 		$here = "#$realline: " if ($file);
 
 		# extract the filename as it passes
-		if ($line=~/^\+\+\+\s+(\S+)/) {
+		if ($line =~ /^diff --git.*?(\S+)$/) {
+			$realfile = $1;
+			$realfile =~ s@^([^/]*)/@@;
+
+		} elsif ($line =~ /^\+\+\+\s+(\S+)/) {
 			$realfile = $1;
 			$realfile =~ s@^([^/]*)/@@;
 
@@ -1322,6 +1326,14 @@ sub process {
 		my $hereprev = "$here\n$prevrawline\n$rawline\n";
 
 		$cnt_lines++ if ($realcnt != 0);
+
+# Check for incorrect file permissions
+		if ($line =~ /^new (file )?mode.*[7531]\d{0,2}$/) {
+			my $permhere = $here . "FILE: $realfile\n";
+			if ($realfile =~ /(Makefile|Kconfig|\.c|\.h|\.S|\.tmpl)$/) {
+				ERROR("do not set execute permissions for source files\n" . $permhere);
+			}
+		}
 
 #check the patch for a signoff:
 		if ($line =~ /^\s*signed-off-by:/i) {
@@ -2678,9 +2690,9 @@ sub process {
 			WARN("consider using a completion\n" . $herecurr);
 
 		}
-# recommend strict_strto* over simple_strto*
+# recommend kstrto* over simple_strto*
 		if ($line =~ /\bsimple_(strto.*?)\s*\(/) {
-			WARN("consider using strict_$1 in preference to simple_$1\n" . $herecurr);
+			WARN("consider using kstrto* in preference to simple_$1\n" . $herecurr);
 		}
 # check for __initcall(), use device_initcall() explicitly please
 		if ($line =~ /^.\s*__initcall\s*\(/) {

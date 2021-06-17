@@ -3341,7 +3341,7 @@ static int iwl_mac_ampdu_action(struct ieee80211_hw *hw,
 			iwl_send_lq_cmd(priv, &sta_priv->lq_sta.lq,
 				CMD_ASYNC, false);
 		}
- 		break;
+		break;
 		if (test_bit(STATUS_EXIT_PENDING, &priv->status))
 			return 0;
 		else

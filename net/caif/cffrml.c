@@ -6,6 +6,8 @@
  * License terms: GNU General Public License (GPL) version 2
  */
 
+#define pr_fmt(fmt) KBUILD_MODNAME ":%s(): " fmt, __func__
+
 #include <linux/stddef.h>
 #include <linux/spinlock.h>
 #include <linux/slab.h>
@@ -32,7 +34,7 @@ struct cflayer *cffrml_create(u16 phyid, bool use_fcs)
 {
 	struct cffrml *this = kmalloc(sizeof(struct cffrml), GFP_ATOMIC);
 	if (!this) {
-		pr_warning("CAIF: %s(): Out of memory\n", __func__);
+		pr_warn("Out of memory\n");
 		return NULL;
 	}
 	caif_assert(offsetof(struct cffrml, layer) == 0);
@@ -83,7 +85,7 @@ static int cffrml_receive(struct cflayer *layr, struct cfpkt *pkt)
 
 	if (cfpkt_setlen(pkt, len) < 0) {
 		++cffrml_rcv_error;
-		pr_err("CAIF: %s():Framing length error (%d)\n", __func__, len);
+		pr_err("Framing length error (%d)\n", len);
 		cfpkt_destroy(pkt);
 		return -EPROTO;
 	}
@@ -99,14 +101,14 @@ static int cffrml_receive(struct cflayer *layr, struct cfpkt *pkt)
 			cfpkt_add_trail(pkt, &tmp, 2);
 			++cffrml_rcv_error;
 			++cffrml_rcv_checsum_error;
-			pr_info("CAIF: %s(): Frame checksum error "
-				"(0x%x != 0x%x)\n", __func__, hdrchks, pktchks);
+			pr_info("Frame checksum error (0x%x != 0x%x)\n",
+				hdrchks, pktchks);
 			return -EILSEQ;
 		}
 	}
 	if (cfpkt_erroneous(pkt)) {
 		++cffrml_rcv_error;
-		pr_err("CAIF: %s(): Packet is erroneous!\n", __func__);
+		pr_err("Packet is erroneous!\n");
 		cfpkt_destroy(pkt);
 		return -EPROTO;
 	}
@@ -118,7 +120,6 @@ static int cffrml_transmit(struct cflayer *layr, struct cfpkt *pkt)
 	int tmp;
 	u16 chks;
 	u16 len;
-	int ret;
 	struct cffrml *this = container_obj(layr);
 	if (this->dofcs) {
 		chks = cfpkt_iterate(pkt, cffrml_checksum, 0xffff);
@@ -132,15 +133,10 @@ static int cffrml_transmit(struct cflayer *layr, struct cfpkt *pkt)
 	cfpkt_add_head(pkt, &tmp, 2);
 	cfpkt_info(pkt)->hdr_len += 2;
 	if (cfpkt_erroneous(pkt)) {
-		pr_err("CAIF: %s(): Packet is erroneous!\n", __func__);
+		pr_err("Packet is erroneous!\n");
 		return -EPROTO;
 	}
-	ret = layr->dn->transmit(layr->dn, pkt);
-	if (ret < 0) {
-		/* Remove header on faulty packet. */
-		cfpkt_extr_head(pkt, &tmp, 2);
-	}
-	return ret;
+	return layr->dn->transmit(layr->dn, pkt);
 }
 
 static void cffrml_ctrlcmd(struct cflayer *layr, enum caif_ctrlcmd ctrl,
@@ -148,4 +144,12 @@ static void cffrml_ctrlcmd(struct cflayer *layr, enum caif_ctrlcmd ctrl,
 {
 	if (layr->up->ctrlcmd)
 		layr->up->ctrlcmd(layr->up, ctrl, layr->id);
+}
+
+void cffrml_put(struct cflayer *layr)
+{
+}
+
+void cffrml_hold(struct cflayer *layr)
+{
 }

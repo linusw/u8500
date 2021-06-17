@@ -526,7 +526,7 @@ static void tty_ldisc_restore(struct tty_struct *tty, struct tty_ldisc *old)
 static int tty_ldisc_halt(struct tty_struct *tty)
 {
 	clear_bit(TTY_LDISC, &tty->flags);
-	return cancel_delayed_work_sync(&tty->buf.work);
+	return cancel_work_sync(&tty->buf.work);
 }
 
 /**
@@ -678,9 +678,9 @@ int tty_set_ldisc(struct tty_struct *tty, int ldisc)
 	/* Restart the work queue in case no characters kick it off. Safe if
 	   already running */
 	if (work)
-		schedule_delayed_work(&tty->buf.work, 1);
+		schedule_work(&tty->buf.work);
 	if (o_work)
-		schedule_delayed_work(&o_tty->buf.work, 1);
+		schedule_work(&o_tty->buf.work);
 	mutex_unlock(&tty->ldisc_mutex);
 	unlock_kernel();
 	return retval;

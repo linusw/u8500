@@ -28,6 +28,29 @@
  * lockdep: we want to handle all irq_desc locks as a single lock-class:
  */
 struct lock_class_key irq_desc_lock_class;
+#ifdef CONFIG_SAMSUNG_KERNEL_DEBUG
+#ifdef CONFIG_SAMSUNG_LOG_BUF
+#include <mach/board-sec-u8500.h>
+#define IRQ_LOG_MAX 2000
+
+typedef struct {
+	unsigned long long time;
+	unsigned int id;
+	char cpu;
+	char ret;
+} irq_log_t;
+
+static irq_log_t * a_log_irq;
+
+static int log_idx = -1;
+void * log_buf_irq;
+EXPORT_SYMBOL(log_buf_irq);
+const int log_buf_irq_entry_size = sizeof(irq_log_t);
+EXPORT_SYMBOL(log_buf_irq_entry_size);
+const int log_buf_irq_entry_count = IRQ_LOG_MAX;
+EXPORT_SYMBOL(log_buf_irq_entry_count);
+#endif
+#endif /* CONFIG_SAMSUNG_KERNEL_DEBUG */
 
 /**
  * handle_bad_irq - handle spurious and unhandled irqs
@@ -369,12 +392,45 @@ irqreturn_t handle_IRQ_event(unsigned int irq, struct irqaction *action)
 {
 	irqreturn_t ret, retval = IRQ_NONE;
 	unsigned int status = 0;
+#ifdef CONFIG_SAMSUNG_KERNEL_DEBUG
+	int cpu;
+	cpu = smp_processor_id();
+#endif
 
 	do {
 		trace_irq_handler_entry(irq, action);
+#ifdef CONFIG_SAMSUNG_KERNEL_DEBUG
+#ifdef CONFIG_SAMSUNG_LOG_BUF
+		if (a_log_irq) {
+			log_idx++;
+			if ((unsigned int)log_idx >= IRQ_LOG_MAX)
+				log_idx = 0;
+
+			a_log_irq[log_idx].time = cpu_clock(cpu);
+			a_log_irq[log_idx].cpu = cpu;
+			a_log_irq[log_idx].id = irq;
+			a_log_irq[log_idx].ret = -1;
+		} else if (log_buf_irq) {
+			a_log_irq = (irq_log_t*)log_buf_irq;
+		}
+#endif
+#endif
 		ret = action->handler(irq, action->dev_id);
 		trace_irq_handler_exit(irq, action, ret);
-
+#ifdef CONFIG_SAMSUNG_KERNEL_DEBUG
+#ifdef CONFIG_SAMSUNG_LOG_BUF
+		if (a_log_irq) {
+			log_idx++;
+			if ((unsigned int)log_idx >= IRQ_LOG_MAX)
+				log_idx = 0;
+			
+			a_log_irq[log_idx].time = cpu_clock(cpu);
+			a_log_irq[log_idx].cpu = cpu;
+			a_log_irq[log_idx].id = irq;
+			a_log_irq[log_idx].ret = ret;
+		}
+#endif          
+#endif
 		switch (ret) {
 		case IRQ_WAKE_THREAD:
 			/*

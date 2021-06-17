@@ -29,6 +29,7 @@
 #include <asm/cacheflush.h>
 #include <asm/cpu.h>
 #include <asm/cputype.h>
+#include <asm/topology.h>
 #include <asm/mmu_context.h>
 #include <asm/pgtable.h>
 #include <asm/pgalloc.h>
@@ -291,8 +292,6 @@ asmlinkage void __cpuinit secondary_start_kernel(void)
 	 */
 	percpu_timer_setup();
 
-	calibrate_delay();
-
 	smp_store_cpu_info(cpu);
 
 	/*
@@ -315,6 +314,8 @@ void __cpuinit smp_store_cpu_info(unsigned int cpuid)
 	struct cpuinfo_arm *cpu_info = &per_cpu(cpu_data, cpuid);
 
 	cpu_info->loops_per_jiffy = loops_per_jiffy;
+
+	store_cpu_topology(cpuid);
 }
 
 void __init smp_cpus_done(unsigned int max_cpus)
@@ -425,11 +426,14 @@ asmlinkage void __exception do_local_timer(struct pt_regs *regs)
 #endif
 
 #ifdef CONFIG_GENERIC_CLOCKEVENTS_BROADCAST
-static void smp_timer_broadcast(const struct cpumask *mask)
+void smp_timer_broadcast(const struct cpumask *mask)
 {
 	send_ipi_message(mask, IPI_TIMER);
 }
+#endif
 
+#if defined(CONFIG_GENERIC_CLOCKEVENTS_BROADCAST) && \
+	!defined(CONFIG_LOCAL_TIMERS)
 static void broadcast_timer_set_mode(enum clock_event_mode mode,
 	struct clock_event_device *evt)
 {
@@ -476,6 +480,9 @@ static void ipi_cpu_stop(unsigned int cpu)
 
 	local_fiq_disable();
 	local_irq_disable();
+
+	flush_cache_all();
+	local_flush_tlb_all();
 
 	while (1)
 		cpu_relax();

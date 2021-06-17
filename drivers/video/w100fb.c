@@ -116,7 +116,7 @@ static ssize_t w100fb_reg_read(struct device *dev, struct device_attribute *attr
 	unsigned long regs, param;
 	regs = simple_strtoul(buf, NULL, 16);
 	param = readl(remapped_regs + regs);
-	printk("Read Register 0x%08lX: 0x%08lX\n", regs, param);
+	printk(KERN_INFO "Read Register 0x%08lX: 0x%08lX\n", regs, param);
 	return count;
 }
 
@@ -128,7 +128,7 @@ static ssize_t w100fb_reg_write(struct device *dev, struct device_attribute *att
 	sscanf(buf, "%lx %lx", &regs, &param);
 
 	if (regs <= 0x2000) {
-		printk("Write Register 0x%08lX: 0x%08lX\n", regs, param);
+		printk(KERN_INFO "Write Register 0x%08lX: 0x%08lX\n", regs, param);
 		writel(param, remapped_regs + regs);
 	}
 
@@ -153,10 +153,10 @@ static ssize_t fastpllclk_store(struct device *dev, struct device_attribute *att
 
 	if (simple_strtoul(buf, NULL, 10) > 0) {
 		par->fastpll_mode=1;
-		printk("w100fb: Using fast system clock (if possible)\n");
+		printk(KERN_INFO "w100fb: Using fast system clock (if possible)\n");
 	} else {
 		par->fastpll_mode=0;
-		printk("w100fb: Using normal system clock\n");
+		printk(KERN_INFO "w100fb: Using normal system clock\n");
 	}
 
 	w100_init_clocks(par);
@@ -652,18 +652,18 @@ int __devinit w100fb_probe(struct platform_device *pdev)
 		goto out;
 
 	/* Identify the chip */
-	printk("Found ");
+	printk(KERN_INFO "Found ");
 	chip_id = readl(remapped_regs + mmCHIP_ID);
 	switch(chip_id) {
-		case CHIP_ID_W100:  printk("w100");  break;
-		case CHIP_ID_W3200: printk("w3200"); break;
-		case CHIP_ID_W3220: printk("w3220"); break;
+		case CHIP_ID_W100:  printk(KERN_INFO "w100");  break;
+		case CHIP_ID_W3200: printk(KERN_INFO "w3200"); break;
+		case CHIP_ID_W3220: printk(KERN_INFO "w3220"); break;
 		default:
-			printk("Unknown imageon chip ID\n");
+			printk(KERN_INFO "Unknown imageon chip ID\n");
 			err = -ENODEV;
 			goto out;
 	}
-	printk(" at 0x%08lx.\n", (unsigned long) mem->start+W100_CFG_BASE);
+	printk(KERN_INFO " at 0x%08lx.\n", (unsigned long) mem->start+W100_CFG_BASE);
 
 	/* Remap the framebuffer */
 	remapped_fbuf = ioremap_nocache(mem->start+MEM_WINDOW_BASE, MEM_WINDOW_SIZE);

@@ -41,10 +41,14 @@
 #include <linux/errno.h>
 #include <linux/init.h>
 #include <linux/list.h>
+#include <linux/dma-mapping.h>
 
 #include "musb_core.h"
 #include "musb_host.h"
 
+#ifdef CONFIG_ARCH_U8500
+#include "ste_config.h"
+#endif
 
 /* MUSB HOST status 22-mar-2006
  *
@@ -106,24 +110,41 @@ static void musb_ep_program(struct musb *musb, u8 epnum,
 static void musb_h_tx_flush_fifo(struct musb_hw_ep *ep)
 {
 	void __iomem	*epio = ep->regs;
+	void __iomem    *regs = ep->musb->mregs;
 	u16		csr;
-	u16		lastcsr = 0;
-	int		retries = 1000;
+	u8		addr;
+	int		retries = 3000; /* 3ms */
 
+	/*
+	 * NOTE: We are using a hack here because the FIFO-FLUSH
+	 * bit is broken in hardware! The hack consists of changing
+	 * the TXFUNCADDR to an unused device address and waiting
+	 * for any pending USB packets to hit the 3-strikes and your
+	 * gone rule.
+	 */
+	addr = musb_readb(regs, MUSB_BUSCTL_OFFSET(ep->epnum, MUSB_TXFUNCADDR));
 	csr = musb_readw(epio, MUSB_TXCSR);
 	while (csr & MUSB_TXCSR_FIFONOTEMPTY) {
-		if (csr != lastcsr)
-			DBG(3, "Host TX FIFONOTEMPTY csr: %02x\n", csr);
-		lastcsr = csr;
-		csr |= MUSB_TXCSR_FLUSHFIFO;
-		musb_writew(epio, MUSB_TXCSR, csr);
+		musb_writeb(regs, MUSB_BUSCTL_OFFSET(ep->epnum,
+			MUSB_TXFUNCADDR), 127);
 		csr = musb_readw(epio, MUSB_TXCSR);
-		if (WARN(retries-- < 1,
-				"Could not flush host TX%d fifo: csr: %04x\n",
-				ep->epnum, csr))
-			return;
-		mdelay(1);
+		retries--;
+		if (retries == 0) {
+			/* can happen if the USB clocks are OFF */
+			DBG(3, "Could not flush host TX%d "
+				"fifo: csr=0x%04x\n", ep->epnum, csr);
+			break;
+		}
+		udelay(1);
 	}
+	/* clear any errors */
+	csr &= ~(MUSB_TXCSR_H_ERROR
+		| MUSB_TXCSR_H_RXSTALL
+		| MUSB_TXCSR_H_NAKTIMEOUT);
+	musb_writew(epio, MUSB_TXCSR, csr);
+
+	/* restore endpoint address */
+	musb_writeb(regs, MUSB_BUSCTL_OFFSET(ep->epnum, MUSB_TXFUNCADDR), addr);
 }
 
 static void musb_h_ep0_flush_fifo(struct musb_hw_ep *ep)
@@ -175,9 +196,11 @@ static inline void musb_h_tx_dma_start(struct musb_hw_ep *ep)
 
 	/* NOTE: no locks here; caller should lock and select EP */
 	txcsr = musb_readw(ep->regs, MUSB_TXCSR);
+
 	txcsr |= MUSB_TXCSR_DMAENAB | MUSB_TXCSR_H_WZC_BITS;
 	if (is_cppi_enabled())
 		txcsr |= MUSB_TXCSR_DMAMODE;
+
 	musb_writew(ep->regs, MUSB_TXCSR, txcsr);
 }
 
@@ -323,8 +346,15 @@ __acquires(musb->lock)
 			urb->actual_length, urb->transfer_buffer_length
 			);
 
+
 	usb_hcd_unlink_urb_from_ep(musb_to_hcd(musb), urb);
 	spin_unlock(&musb->lock);
+#ifdef CONFIG_USB_U8500_DMA
+		/* Make it safe to call this routine more than once */
+	urb->transfer_flags &= ~(URB_SETUP_MAP_SINGLE | URB_SETUP_MAP_LOCAL |
+			URB_DMA_MAP_SG | URB_DMA_MAP_PAGE |
+			URB_DMA_MAP_SINGLE | URB_MAP_LOCAL);
+#endif
 	usb_hcd_giveback_urb(musb_to_hcd(musb), urb, status);
 	spin_lock(&musb->lock);
 }
@@ -627,12 +657,12 @@ static bool musb_tx_dma_program(struct dma_controller *dma,
 	u16			csr;
 	u8			mode;
 
-#ifdef	CONFIG_USB_INVENTRA_DMA
+#if defined(CONFIG_USB_INVENTRA_DMA) || defined(CONFIG_USB_U8500_DMA)
 	if (length > channel->max_len)
 		length = channel->max_len;
 
 	csr = musb_readw(epio, MUSB_TXCSR);
-	if (length > pkt_size) {
+	if (length >= pkt_size) {
 		mode = 1;
 		csr |= MUSB_TXCSR_DMAMODE | MUSB_TXCSR_DMAENAB;
 		/* autoset shouldn't be set in high bandwidth */
@@ -659,6 +689,12 @@ static bool musb_tx_dma_program(struct dma_controller *dma,
 #endif
 
 	qh->segsize = length;
+
+	/*
+	 * Ensure the data reaches to main memory before starting
+	 * DMA transfer
+	 */
+	wmb();
 
 	if (!dma->channel_program(channel, pkt_size, mode,
 			urb->transfer_dma + offset, length)) {
@@ -842,7 +878,6 @@ static void musb_ep_program(struct musb *musb, u8 epnum,
 		}
 
 		/* kick things off */
-
 		if ((is_cppi_enabled() || tusb_dma_omap()) && dma_channel) {
 			/* candidate for DMA */
 			if (dma_channel) {
@@ -872,7 +907,6 @@ static void musb_ep_program(struct musb *musb, u8 epnum,
 					csr |= MUSB_RXCSR_DMAENAB;
 			}
 		}
-
 		csr |= MUSB_RXCSR_H_REQPKT;
 		DBG(7, "RXCSR%d := %04x\n", epnum, csr);
 		musb_writew(hw_ep->regs, MUSB_RXCSR, csr);
@@ -1141,7 +1175,24 @@ void musb_host_tx(struct musb *musb, u8 epnum)
 		DBG(3, "TX 3strikes on ep=%d\n", epnum);
 
 		status = -ETIMEDOUT;
-
+	} else if (tx_csr & MUSB_TXCSR_TXPKTRDY) {
+		/* BUSY - can happen during USB transfer cancel */
+#ifdef CONFIG_USB_U8500_DMA
+		/* MUSB_TXCSR_TXPKTRDY indicates that the data written
+		 * to the FIFO by DMA has not still gone on the USB bus.
+		 * DMA completion callback doesn't indicate that data has
+		 * gone on the USB bus. So, if we reach this case, need to
+		 * wait for the MUSB_TXCSR_TXPKTRDY to be cleared and then
+		 * proceed.
+		 */
+		DBG(6, "TXPKTRDY set. Data transfer ongoing. Wait...\n");
+		do {
+			tx_csr = musb_readw(epio, MUSB_TXCSR);
+		} while ((tx_csr & MUSB_TXCSR_TXPKTRDY) != 0);
+		DBG(6, "TXPKTRDY Cleared. Continue...\n");
+#else
+		return;
+#endif
 	} else if (tx_csr & MUSB_TXCSR_H_NAKTIMEOUT) {
 		DBG(6, "TX end=%d device not responding\n", epnum);
 
@@ -1326,6 +1377,8 @@ void musb_host_tx(struct musb *musb, u8 epnum)
 	 */
 	if (length > qh->maxpacket)
 		length = qh->maxpacket;
+	/* Unmap the buffer so that CPU can use it */
+	unmap_urb_for_dma(musb_to_hcd(musb), urb);
 	musb_write_fifo(hw_ep, length, urb->transfer_buffer + offset);
 	qh->segsize = length;
 
@@ -1437,6 +1490,9 @@ void musb_host_rx(struct musb *musb, u8 epnum)
 	u32			status;
 	struct dma_channel	*dma;
 
+#if defined(CONFIG_USB_U8500_DMA)
+	u16			tmp_val;
+#endif
 	musb_ep_select(mbase, epnum);
 
 	urb = next_urb(qh);
@@ -1527,7 +1583,6 @@ void musb_host_rx(struct musb *musb, u8 epnum)
 		done = true;
 		goto finish;
 	}
-
 	if (unlikely(dma_channel_status(dma) == MUSB_DMA_STATUS_BUSY)) {
 		/* SHOULD NEVER HAPPEN ... but at least DaVinci has done it */
 		ERR("RX%d dma busy, csr %04x\n", epnum, rx_csr);
@@ -1541,7 +1596,7 @@ void musb_host_rx(struct musb *musb, u8 epnum)
 
 	/* FIXME this is _way_ too much in-line logic for Mentor DMA */
 
-#ifndef CONFIG_USB_INVENTRA_DMA
+#if !defined(CONFIG_USB_INVENTRA_DMA) && !defined(CONFIG_USB_U8500_DMA)
 	if (rx_csr & MUSB_RXCSR_H_REQPKT)  {
 		/* REVISIT this happened for a while on some short reads...
 		 * the cleanup still needs investigation... looks bad...
@@ -1564,6 +1619,7 @@ void musb_host_rx(struct musb *musb, u8 epnum)
 				MUSB_RXCSR_H_WZC_BITS | rx_csr);
 	}
 #endif
+
 	if (dma && (rx_csr & MUSB_RXCSR_DMAENAB)) {
 		xfer_len = dma->actual_len;
 
@@ -1573,7 +1629,7 @@ void musb_host_rx(struct musb *musb, u8 epnum)
 			| MUSB_RXCSR_RXPKTRDY);
 		musb_writew(hw_ep->regs, MUSB_RXCSR, val);
 
-#ifdef CONFIG_USB_INVENTRA_DMA
+#if defined(CONFIG_USB_INVENTRA_DMA) || defined(CONFIG_USB_U8500_DMA)
 		if (usb_pipeisoc(pipe)) {
 			struct usb_iso_packet_descriptor *d;
 
@@ -1629,7 +1685,7 @@ void musb_host_rx(struct musb *musb, u8 epnum)
 		}
 
 		/* we are expecting IN packets */
-#ifdef CONFIG_USB_INVENTRA_DMA
+#if defined(CONFIG_USB_INVENTRA_DMA) || defined(CONFIG_USB_U8500_DMA)
 		if (dma) {
 			struct dma_controller	*c;
 			u16			rx_count;
@@ -1713,6 +1769,14 @@ void musb_host_rx(struct musb *musb, u8 epnum)
  */
 
 			val = musb_readw(epio, MUSB_RXCSR);
+
+#if  defined(CONFIG_USB_U8500_DMA)
+			/* retain the original value,
+			 *which will be used to reset CSR
+			 */
+			tmp_val = val;
+#endif
+
 			val &= ~MUSB_RXCSR_H_REQPKT;
 
 			if (dma->desired_mode == 0)
@@ -1741,11 +1805,17 @@ void musb_host_rx(struct musb *musb, u8 epnum)
 				hw_ep->rx_channel = NULL;
 				dma = NULL;
 				/* REVISIT reset CSR */
+
+#if  defined(CONFIG_USB_U8500_DMA)
+			musb_writew(epio, MUSB_RXCSR, tmp_val);
+#endif
 			}
 		}
-#endif	/* Mentor DMA */
+#endif	/* Mentor DMA || U8500 DMA */
 
 		if (!dma) {
+			/* Unmap the buffer so that CPU can use it */
+			unmap_urb_for_dma(musb_to_hcd(musb), urb);
 			done = musb_host_packet_rx(musb, urb,
 					epnum, iso_err);
 			DBG(6, "read %spacket\n", done ? "last " : "");

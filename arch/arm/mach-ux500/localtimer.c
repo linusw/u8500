@@ -18,11 +18,20 @@
 #include <asm/smp_twd.h>
 #include <asm/localtimer.h>
 
+#ifdef CONFIG_GENERIC_CLOCKEVENTS_BROADCAST
+void smp_timer_broadcast(const struct cpumask *mask);
+#endif
+
 /*
  * Setup the local clock events for a CPU.
  */
 void __cpuinit local_timer_setup(struct clock_event_device *evt)
 {
 	evt->irq = IRQ_LOCALTIMER;
-	twd_timer_setup(evt);
+
+#ifdef CONFIG_GENERIC_CLOCKEVENTS_BROADCAST
+        evt->broadcast = smp_timer_broadcast;
+#endif
+
+	twd_timer_setup_scalable(evt, 2500 * 1000, 2);
 }

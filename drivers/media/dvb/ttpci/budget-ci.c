@@ -138,7 +138,7 @@ static void msp430_ir_interrupt(unsigned long data)
 	 */
 
 	if (ir_debug)
-		printk("budget_ci: received byte 0x%02x\n", command);
+		printk(KERN_INFO "budget_ci: received byte 0x%02x\n", command);
 
 	/* Remove repeat bit, we use every command */
 	command = command & 0x7f;
@@ -493,7 +493,7 @@ static int ciintf_init(struct budget_ci *budget_ci)
 	if ((result = dvb_ca_en50221_init(&budget_ci->budget.dvb_adapter,
 					  &budget_ci->ca,
 					  ca_flags, 1)) != 0) {
-		printk("budget_ci: CI interface detected, but initialisation failed.\n");
+		printk(KERN_INFO "budget_ci: CI interface detected, but initialisation failed.\n");
 		goto error;
 	}
 
@@ -513,7 +513,7 @@ static int ciintf_init(struct budget_ci *budget_ci)
 			       CICONTROL_RESET, 1, 0);
 
 	// success!
-	printk("budget_ci: CI interface initialised\n");
+	printk(KERN_INFO "budget_ci: CI interface initialised\n");
 	budget_ci->budget.ci_present = 1;
 
 	// forge a fake CI IRQ so the CAM state is setup correctly
@@ -1365,7 +1365,8 @@ static void frontend_init(struct budget_ci *budget_ci)
 
 			budget_ci->budget.dvb_frontend->ops.dishnetwork_send_legacy_command = NULL;
 			if (dvb_attach(lnbp21_attach, budget_ci->budget.dvb_frontend, &budget_ci->budget.i2c_adap, LNBP21_LLC, 0) == NULL) {
-				printk("%s: No LNBP21 found!\n", __func__);
+				printk(KERN_INFO "%s: No LNBP21 found!\n",
+						__func__);
 				dvb_frontend_detach(budget_ci->budget.dvb_frontend);
 				budget_ci->budget.dvb_frontend = NULL;
 			}
@@ -1411,7 +1412,7 @@ static void frontend_init(struct budget_ci *budget_ci)
 		if (budget_ci->budget.dvb_frontend) {
 			if (dvb_attach(stb6100_attach, budget_ci->budget.dvb_frontend, &tt3200_stb6100_config, &budget_ci->budget.i2c_adap)) {
 				if (!dvb_attach(lnbp21_attach, budget_ci->budget.dvb_frontend, &budget_ci->budget.i2c_adap, 0, 0)) {
-					printk("%s: No LNBP21 found!\n", __func__);
+					printk(KERN_INFO "%s: No LNBP21 found!\n", __func__);
 					dvb_frontend_detach(budget_ci->budget.dvb_frontend);
 					budget_ci->budget.dvb_frontend = NULL;
 				}
@@ -1425,7 +1426,7 @@ static void frontend_init(struct budget_ci *budget_ci)
 	}
 
 	if (budget_ci->budget.dvb_frontend == NULL) {
-		printk("budget-ci: A frontend driver was not found for device [%04x:%04x] subsystem [%04x:%04x]\n",
+		printk(KERN_INFO "budget-ci: A frontend driver was not found for device [%04x:%04x] subsystem [%04x:%04x]\n",
 		       budget_ci->budget.dev->pci->vendor,
 		       budget_ci->budget.dev->pci->device,
 		       budget_ci->budget.dev->pci->subsystem_vendor,
@@ -1433,7 +1434,7 @@ static void frontend_init(struct budget_ci *budget_ci)
 	} else {
 		if (dvb_register_frontend
 		    (&budget_ci->budget.dvb_adapter, budget_ci->budget.dvb_frontend)) {
-			printk("budget-ci: Frontend registration failed!\n");
+			printk(KERN_INFO "budget-ci: Frontend registration failed!\n");
 			dvb_frontend_detach(budget_ci->budget.dvb_frontend);
 			budget_ci->budget.dvb_frontend = NULL;
 		}

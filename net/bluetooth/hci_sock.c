@@ -191,6 +191,9 @@ static inline int hci_sock_bound_ioctl(struct sock *sk, unsigned int cmd, unsign
 	case HCIGETCONNINFO:
 		return hci_get_conn_info(hdev, (void __user *) arg);
 
+	case HCISETCONNINFO:
+		return hci_set_conn_info(hdev, (void __user *) arg);
+
 	case HCIGETAUTHINFO:
 		return hci_get_auth_info(hdev, (void __user *) arg);
 

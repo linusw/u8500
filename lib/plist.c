@@ -23,6 +23,7 @@
  * information.
  */
 
+#include <linux/module.h>
 #include <linux/plist.h>
 #include <linux/spinlock.h>
 
@@ -97,6 +98,7 @@ eq_prio:
 
 	plist_check_head(head);
 }
+EXPORT_SYMBOL(plist_add);
 
 /**
  * plist_del - Remove a @node from plist.
@@ -119,3 +121,4 @@ void plist_del(struct plist_node *node, struct plist_head *head)
 
 	plist_check_head(head);
 }
+EXPORT_SYMBOL(plist_del);

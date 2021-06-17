@@ -199,6 +199,9 @@ extern void tcp_time_wait(struct sock *sk, int state, int timeo);
 /* TCP thin-stream limits */
 #define TCP_THIN_LINEAR_RETRIES 6       /* After 6 linear retries, do exp. backoff */
 
+/* TCP initial congestion window */
+#define TCP_INIT_CWND    10
+
 extern struct inet_timewait_death_row tcp_death_row;
 
 /* sysctl variables for tcp */
@@ -1456,6 +1459,8 @@ extern struct sk_buff **tcp4_gro_receive(struct sk_buff **head,
 					 struct sk_buff *skb);
 extern int tcp_gro_complete(struct sk_buff *skb);
 extern int tcp4_gro_complete(struct sk_buff *skb);
+
+extern void tcp_v4_nuke_addr(__u32 saddr);
 
 #ifdef CONFIG_PROC_FS
 extern int  tcp4_proc_init(void);

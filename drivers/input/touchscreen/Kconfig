@@ -99,6 +99,30 @@ config TOUCHSCREEN_BITSY
 	  To compile this driver as a module, choose M here: the
 	  module will be called h3600_ts_input.
 
+config TOUCHSCREEN_BU21013
+	tristate "BU21013 based touch panel controllers"
+	depends on I2C
+        default y
+	help
+	  Say Y here if you have a ROHM BU21013 and
+	  want to enable support for the built-in touchscreen.
+
+	  To compile this driver as a module, choose M here: the
+	  module will be called bu21013_ts.
+
+config TOUCHSCREEN_CORGI
+	tristate "SharpSL (Corgi and Spitz series) touchscreen driver (DEPRECATED)"
+	depends on PXA_SHARPSL
+	select CORGI_SSP_DEPRECATED
+	help
+	  Say Y here if you have a bu21013 touchscreen connected to
+	  your system.
+
+	  If unsure, say N.
+
+	  To compile this driver as a module, choose M here: the
+	  module will be called bu21013_ts.
+
 config TOUCHSCREEN_DA9034
 	tristate "Touchscreen support for Dialog Semiconductor DA9034"
 	depends on PMIC_DA903X
@@ -302,6 +326,12 @@ config TOUCHSCREEN_MIGOR
 
 	  To compile this driver as a module, choose M here: the
 	  module will be called migor_ts.
+
+config TOUCHSCREEN_SYNAPTICS_I2C_RMI
+	tristate "Synaptics i2c touchscreen"
+	depends on I2C
+	help
+	  This enables support for Synaptics RMI over I2C based touchscreens.
 
 config TOUCHSCREEN_TOUCHRIGHT
 	tristate "Touchright serial touchscreen"
@@ -603,4 +633,74 @@ config TOUCHSCREEN_TPS6507X
 	  To compile this driver as a module, choose M here: the
 	  module will be called tps6507x_ts.
 
+ config TOUCHSCREEN_AT42QT602240
+	tristate "Atmel AT42QT602240 based touchscreens"
+	depends on I2C
+	help
+	  Say Y here if you have a Atmel AT42QT602240 based touchscreen.
+	  If unsure, say N.
+	  To compile this driver as a module, choose M here: the
+	  module will be called atmel_touch_602240.
+
+config TOUCHSCREEN_QT602240
+        tristate "quantum touchscreen driver"
+        depends on I2C
+        default N
+        help
+          Say Y here to enable the driver for the touchscreen on your embedded board.
+
+          If unsure, say N.
+
+          To compile this driver as a module, choose M here: the
+          module will be called qt602240_ts.
+
+config TOUCHSCREEN_ATMEL_MXT224E
+	bool "Atmel MXT224E Touchscreen Interface"
+	depends on I2C
+	default n
+	help
+		Say Y here if you want support for atmel_224E touchscreen controllers.
+		
+		To compile this driver as a module, choose M here: the
+		module will be called atmel_mxt224E.
+
+config TOUCHSCREEN_ZINITIX_BT404
+	bool "Zinitix BT404 Touchscreens"
+	depends on I2C
+	default n
+	help
+		Say Y if you want support for Zinitix bt404 touchscreen
+		controllers.
+
+config TOUCHSCREEN_TMA340
+	bool "Cypress TMA340 Touchscreen"
+	depends on I2C
+	default n
+	help
+	  Say Y here if you want support for Cypress TMA340
+	  touchscreen controller for GT-I9060.
+
+config TOUCHSCREEN_MELFAS
+	tristate "MELFAS touchscreen driver"
+	depends on I2C
+	help
+	  Say Y here if you have a MELFAS touchscreen.
+
+	  If unsure, say N.
+
+config TSP_FACTORY_TEST
+	bool "Touchscreen factory test"
+	depends on TOUCHSCREEN_MELFAS || TOUCHSCREEN_TMA340
+	help
+		Say Y to enable touchscreen firmware update interface
+
 endif
+
+config TOUCHSCREEN_MMS136_TS
+	tristate "MELFAS mms touchscreen driver"
+	depends on I2C
+	help
+	  Say Y here if you have a MELFAS mms touchscreen.
+
+	  If unsure, say N.
+

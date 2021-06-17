@@ -2993,9 +2993,9 @@ void __devinit bttv_idcard(struct bttv *btv)
 	printk(KERN_INFO "bttv%d: gpio config override: mask=0x%x, mux=",
 	       btv->c.nr,bttv_tvcards[btv->c.type].gpiomask);
 	for (i = 0; i < ARRAY_SIZE(bttv_tvcards->gpiomux); i++) {
-		printk("%s0x%x", i ? "," : "", bttv_tvcards[btv->c.type].gpiomux[i]);
+		printk(KERN_INFO "%s0x%x", i ? "," : "", bttv_tvcards[btv->c.type].gpiomux[i]);
 	}
-	printk("\n");
+	printk(KERN_INFO "\n");
 }
 
 /*
@@ -3016,7 +3016,7 @@ static void identify_by_eeprom(struct bttv *btv, unsigned char eeprom_data[256])
 
 	if (-1 != type) {
 		btv->c.type = type;
-		printk("bttv%d: detected by eeprom: %s [card=%d]\n",
+		printk(KERN_INFO "bttv%d: detected by eeprom: %s [card=%d]\n",
 		       btv->c.nr, bttv_tvcards[btv->c.type].name, btv->c.type);
 	}
 }
@@ -3288,7 +3288,7 @@ static void bttv_reset_audio(struct bttv *btv)
 		return;
 
 	if (bttv_debug)
-		printk("bttv%d: BT878A ARESET\n",btv->c.nr);
+		printk(KERN_INFO "bttv%d: BT878A ARESET\n", btv->c.nr);
 	btwrite((1<<7), 0x058);
 	udelay(10);
 	btwrite(     0, 0x058);
@@ -3391,7 +3391,7 @@ void __devinit bttv_init_card2(struct bttv *btv)
 	case BTTV_BOARD_MAGICTVIEW061:
 		if (btv->cardid == 0x3002144f) {
 			btv->has_radio=1;
-			printk("bttv%d: radio detected by subsystem id (CPH05x)\n",btv->c.nr);
+			printk(KERN_INFO "bttv%d: radio detected by subsystem id (CPH05x)\n", btv->c.nr);
 		}
 		break;
 	case BTTV_BOARD_STB2:
@@ -3681,18 +3681,18 @@ static void modtec_eeprom(struct bttv *btv)
 {
 	if( strncmp(&(eeprom_data[0x1e]),"Temic 4066 FY5",14) ==0) {
 		btv->tuner_type=TUNER_TEMIC_4066FY5_PAL_I;
-		printk("bttv%d: Modtec: Tuner autodetected by eeprom: %s\n",
+		printk(KERN_INFO "bttv%d: Modtec: Tuner autodetected by eeprom: %s\n",
 		       btv->c.nr,&eeprom_data[0x1e]);
 	} else if (strncmp(&(eeprom_data[0x1e]),"Alps TSBB5",10) ==0) {
 		btv->tuner_type=TUNER_ALPS_TSBB5_PAL_I;
-		printk("bttv%d: Modtec: Tuner autodetected by eeprom: %s\n",
+		printk(KERN_INFO "bttv%d: Modtec: Tuner autodetected by eeprom: %s\n",
 		       btv->c.nr,&eeprom_data[0x1e]);
 	} else if (strncmp(&(eeprom_data[0x1e]),"Philips FM1246",14) ==0) {
 		btv->tuner_type=TUNER_PHILIPS_NTSC;
-		printk("bttv%d: Modtec: Tuner autodetected by eeprom: %s\n",
+		printk(KERN_INFO "bttv%d: Modtec: Tuner autodetected by eeprom: %s\n",
 		       btv->c.nr,&eeprom_data[0x1e]);
 	} else {
-		printk("bttv%d: Modtec: Unknown TunerString: %s\n",
+		printk(KERN_INFO "bttv%d: Modtec: Unknown TunerString: %s\n",
 		       btv->c.nr,&eeprom_data[0x1e]);
 	}
 }
@@ -3705,7 +3705,7 @@ static void __devinit hauppauge_eeprom(struct bttv *btv)
 	btv->tuner_type = tv.tuner_type;
 	btv->has_radio  = tv.has_radio;
 
-	printk("bttv%d: Hauppauge eeprom indicates model#%d\n",
+	printk(KERN_INFO "bttv%d: Hauppauge eeprom indicates model#%d\n",
 		btv->c.nr, tv.model);
 
 	/*
@@ -3713,7 +3713,7 @@ static void __devinit hauppauge_eeprom(struct bttv *btv)
 	 * type based on model #.
 	 */
 	if(tv.model == 64900) {
-		printk("bttv%d: Switching board type from %s to %s\n",
+		printk(KERN_INFO "bttv%d: Switching board type from %s to %s\n",
 			btv->c.nr,
 			bttv_tvcards[btv->c.type].name,
 			bttv_tvcards[BTTV_BOARD_HAUPPAUGE_IMPACTVCB].name);
@@ -3740,7 +3740,7 @@ static int terratec_active_radio_upgrade(struct bttv *btv)
 	freq=88000/62.5;
 	tea5757_write(btv, 5 * freq + 0x358); /* write 0x1ed8 */
 	if (0x1ed8 == tea5757_read(btv)) {
-		printk("bttv%d: Terratec Active Radio Upgrade found.\n",
+		printk(KERN_INFO "bttv%d: Terratec Active Radio Upgrade found.\n",
 		       btv->c.nr);
 		btv->has_radio    = 1;
 		btv->has_saa6588  = 1;

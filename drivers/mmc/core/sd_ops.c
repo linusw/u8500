@@ -51,7 +51,7 @@ static int mmc_app_cmd(struct mmc_host *host, struct mmc_card *card)
 
 /**
  *	mmc_wait_for_app_cmd - start an application command and wait for
- 			       completion
+					completion
  *	@host: MMC host to start command
  *	@card: Card to send MMC_APP_CMD to
  *	@cmd: MMC command to start
@@ -78,7 +78,7 @@ int mmc_wait_for_app_cmd(struct mmc_host *host, struct mmc_card *card,
 	 * We have to resend MMC_APP_CMD for each attempt so
 	 * we cannot use the retries field in mmc_command.
 	 */
-	for (i = 0;i <= retries;i++) {
+	for (i = 0; i <= retries; i++) {
 		err = mmc_app_cmd(host, card);
 		if (err) {
 			/* no point in retrying; no APP commands allowed */
@@ -152,6 +152,9 @@ int mmc_send_app_op_cond(struct mmc_host *host, u32 ocr, u32 *rocr)
 	int i, err = 0;
 
 	BUG_ON(!host);
+
+	if (host->rescan_disable)
+		return -ETIMEDOUT;
 
 	memset(&cmd, 0, sizeof(struct mmc_command));
 

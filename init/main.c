@@ -70,6 +70,7 @@
 #include <linux/sfi.h>
 #include <linux/shmem_fs.h>
 #include <linux/slab.h>
+#include <linux/boottime.h>
 #include <trace/boot.h>
 
 #include <asm/io.h>
@@ -205,6 +206,25 @@ char * envp_init[MAX_INIT_ENVS+2] = { "HOME=/", "TERM=linux", NULL, };
 static const char *panic_later, *panic_param;
 
 extern struct obs_kernel_param __setup_start[], __setup_end[];
+
+#ifdef CONFIG_SAMSUNG_LOG_BUF
+void __iomem * log_buf_base = NULL;
+EXPORT_SYMBOL(log_buf_base);
+
+#include <mach/board-sec-u8500.h>
+extern void* log_buf_irq;
+extern int log_buf_irq_entry_size;
+extern int log_buf_irq_entry_count;
+extern void* log_buf_sched;
+extern int log_buf_sched_entry_size;
+extern int log_buf_sched_entry_count;
+extern void* log_buf_prcmu;
+extern int log_buf_prcmu_entry_size;
+extern int log_buf_prcmu_entry_count;
+
+unsigned int * log_buf_writel = NULL;
+EXPORT_SYMBOL(log_buf_writel);
+#endif
 
 static int __init obsolete_checksetup(char *line)
 {
@@ -699,6 +719,45 @@ asmlinkage void __init start_kernel(void)
 	taskstats_init_early();
 	delayacct_init();
 
+
+#ifdef CONFIG_SAMSUNG_LOG_BUF
+	{
+		extern struct meminfo meminfo;
+		struct membank * bank =&meminfo.bank[meminfo.nr_banks-1];
+		log_buf_base = ioremap(bank->start + bank->size, 0x100000);
+		if(!log_buf_base)
+			printk(KERN_NOTICE "[LOG][ERROR] %s() log_buf_base = 0x%p\n", __FUNCTION__, log_buf_base);
+		else {
+			printk(KERN_NOTICE "[LOG] %s() log_buf_base = 0x%p, size=%ld\n", __FUNCTION__, 
+				(long unsigned int)log_buf_base, bank->size);
+
+			/* irq log buffer initialize */
+			if (LOG_IRQ_BUF_SIZE < (log_buf_irq_entry_size*(log_buf_irq_entry_count+2))) {
+				printk(KERN_NOTICE "LOG_IRQ_BUF_SIZE should be checked!!\n");
+			} else {
+				log_buf_irq = (void*)((unsigned long)log_buf_base + LOG_IRQ_BUF_START + log_buf_irq_entry_size);
+			}
+
+			/* scheduler log buffer initialize */
+			if (LOG_SCHED_BUF_SIZE < (log_buf_sched_entry_size*(log_buf_sched_entry_count+2))) {
+				printk(KERN_NOTICE "LOG_SCHED_BUF_SIZE should be checked!!\n");
+			} else {
+				log_buf_sched = (void*)((unsigned long)log_buf_base + LOG_SCHED_BUF_START + log_buf_sched_entry_size);
+			}
+
+			/* prcmu/shrm log buffer initialize */
+			if (LOG_SHRM_PRCMU_BUF_SIZE < (log_buf_prcmu_entry_size*(log_buf_prcmu_entry_count+2))) {
+				printk(KERN_NOTICE "LOG_SHRM_PRCMU_BUF_SIZE should be checked!!\n");
+			} else {
+				log_buf_prcmu = (void*)((unsigned long)log_buf_base + LOG_SHRM_PRCMU_BUF_START + log_buf_prcmu_entry_size);
+			}
+
+			/* writel log initialize */
+			log_buf_writel = (unsigned int*)((unsigned long)log_buf_base + 0x100000 - 4);
+		}
+	}
+#endif
+
 	check_bugs();
 
 	acpi_early_init(); /* before LAPIC and SMP init */
@@ -740,6 +799,8 @@ int do_one_initcall(initcall_t fn)
 		trace_boot_call(&call, fn);
 		enable_boot_trace();
 	}
+
+	boottime_mark_symbolic(fn);
 
 	ret.result = fn();
 
@@ -828,6 +889,7 @@ static noinline int init_post(void)
 {
 	/* need to finish all async __init code before freeing the memory */
 	async_synchronize_full();
+	boottime_deactivate();
 	free_initmem();
 	unlock_kernel();
 	mark_rodata_ro();
@@ -895,6 +957,7 @@ static int __init kernel_init(void * unused)
 
 	do_pre_smp_initcalls();
 	start_boot_trace();
+	boottime_system_up();
 
 	smp_init();
 	sched_init_smp();
@@ -917,6 +980,7 @@ static int __init kernel_init(void * unused)
 
 	if (sys_access((const char __user *) ramdisk_execute_command, 0) != 0) {
 		ramdisk_execute_command = NULL;
+		boottime_mark("mount+0x0/0x0");
 		prepare_namespace();
 	}
 

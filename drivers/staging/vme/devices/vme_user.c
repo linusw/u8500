@@ -224,13 +224,13 @@ static ssize_t resource_to_user(int minor, char __user *buf, size_t count,
 			(unsigned long)copied);
 		if (retval != 0) {
 			copied = (copied - retval);
-			printk("User copy failed\n");
+			printk(KERN_INFO "User copy failed\n");
 			return -EINVAL;
 		}
 
 	} else {
 		/* XXX Need to write this */
-		printk("Currently don't support large transfers\n");
+		printk(KERN_INFO "Currently don't support large transfers\n");
 		/* Map in pages from userspace */
 
 		/* Call vme_master_read to do the transfer */
@@ -264,7 +264,7 @@ static ssize_t resource_from_user(unsigned int minor, const char *buf,
 			image[minor].kern_buf, copied, *ppos);
 	} else {
 		/* XXX Need to write this */
-		printk("Currently don't support large transfers\n");
+		printk(KERN_INFO "Currently don't support large transfers\n");
 		/* Map in pages from userspace */
 
 		/* Call vme_master_write to do the transfer */
@@ -792,7 +792,7 @@ static int __init vme_user_probe(struct device *dev, int cur_bus, int cur_slot)
 				MKDEV(VME_MAJOR, i), NULL, name,
 				(type[i] == SLAVE_MINOR)? i - (MASTER_MAX + 1) : i);
 		if (IS_ERR(image[i].device)) {
-			printk("%s: Error creating sysfs device\n",
+			printk(KERN_INFO "%s: Error creating sysfs device\n",
 				driver_name);
 			err = PTR_ERR(image[i].device);
 			goto err_sysfs;

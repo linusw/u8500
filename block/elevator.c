@@ -154,7 +154,10 @@ static struct elevator_type *elevator_get(const char *name)
 
 		spin_unlock(&elv_list_lock);
 
-		snprintf(elv, sizeof(elv), "%s-iosched", name);
+		if (!strcmp(name, "anticipatory"))
+			sprintf(elv, "as-iosched");
+		else
+			 snprintf(elv, sizeof(elv), "%s-iosched", name);
 
 		request_module("%s", elv);
 		spin_lock(&elv_list_lock);

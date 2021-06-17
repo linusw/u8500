@@ -397,8 +397,8 @@ static void acpi_print_osc_error(acpi_handle handle,
 	}
 	printk(KERN_DEBUG"_OSC request data:");
 	for (i = 0; i < context->cap.length; i += sizeof(u32))
-		printk("%x ", *((u32 *)(context->cap.pointer + i)));
-	printk("\n");
+		printk(KERN_INFO "%x ", *((u32 *)(context->cap.pointer + i)));
+	printk(KERN_INFO "\n");
 }
 
 static acpi_status acpi_str_to_uuid(char *str, u8 *uuid)
