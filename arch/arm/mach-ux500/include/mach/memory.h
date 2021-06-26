@@ -15,4 +15,16 @@
 #define PHYS_OFFSET	UL(0x00000000)
 #define BUS_OFFSET	UL(0x00000000)
 
+#ifdef CONFIG_UX500_SOC_DB8500
+/*
+ * STE NMF CM driver only used on the U8500 allocate using dma_alloc_coherent:
+ *    8M for SIA and SVA data + 2M for SIA code + 2M for SVA code
+ */
+#define CONSISTENT_DMA_SIZE SZ_16M
+#endif
+
+/* Maximum of 256MiB in one bank */
+#define MAX_PHYSMEM_BITS	32
+#define SECTION_SIZE_BITS	28
+
 #endif

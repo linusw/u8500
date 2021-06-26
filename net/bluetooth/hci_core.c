@@ -503,6 +503,7 @@ int hci_dev_open(__u16 dev)
 
 	if (!test_bit(HCI_RAW, &hdev->flags)) {
 		atomic_set(&hdev->cmd_cnt, 1);
+		atomic_set(&hdev->cmd_not_ack, 0);
 		set_bit(HCI_INIT, &hdev->flags);
 
 		//__hci_request(hdev, hci_reset_req, 0, HZ);
@@ -572,6 +573,7 @@ static int hci_dev_do_close(struct hci_dev *hdev)
 	/* Reset device */
 	skb_queue_purge(&hdev->cmd_q);
 	atomic_set(&hdev->cmd_cnt, 1);
+	atomic_set(&hdev->cmd_not_ack, 0);
 	if (!test_bit(HCI_RAW, &hdev->flags)) {
 		set_bit(HCI_INIT, &hdev->flags);
 		__hci_request(hdev, hci_reset_req, 0,
@@ -645,6 +647,7 @@ int hci_dev_reset(__u16 dev)
 		hdev->flush(hdev);
 
 	atomic_set(&hdev->cmd_cnt, 1);
+	atomic_set(&hdev->cmd_not_ack, 0);
 	hdev->acl_cnt = 0; hdev->sco_cnt = 0;
 
 	if (!test_bit(HCI_RAW, &hdev->flags))
@@ -1283,7 +1286,7 @@ void hci_send_acl(struct hci_conn *conn, struct sk_buff *skb, __u16 flags)
 
 	skb->dev = (void *) hdev;
 	bt_cb(skb)->pkt_type = HCI_ACLDATA_PKT;
-	hci_add_acl_hdr(skb, conn->handle, flags | ACL_START);
+	hci_add_acl_hdr(skb, conn->handle, flags);
 
 	if (!(list = skb_shinfo(skb)->frag_list)) {
 		/* Non fragmented */
@@ -1300,12 +1303,14 @@ void hci_send_acl(struct hci_conn *conn, struct sk_buff *skb, __u16 flags)
 		spin_lock_bh(&conn->data_q.lock);
 
 		__skb_queue_tail(&conn->data_q, skb);
+		flags &= ~ACL_PB_MASK;
+		flags |= ACL_CONT;
 		do {
 			skb = list; list = list->next;
 
 			skb->dev = (void *) hdev;
 			bt_cb(skb)->pkt_type = HCI_ACLDATA_PKT;
-			hci_add_acl_hdr(skb, conn->handle, flags | ACL_CONT);
+			hci_add_acl_hdr(skb, conn->handle, flags);
 
 			BT_DBG("%s frag %p len %d", hdev->name, skb, skb->len);
 
@@ -1633,24 +1638,31 @@ static void hci_cmd_task(unsigned long arg)
 	struct hci_dev *hdev = (struct hci_dev *) arg;
 	struct sk_buff *skb;
 
-	BT_DBG("%s cmd %d", hdev->name, atomic_read(&hdev->cmd_cnt));
+	BT_DBG("%s cnt %d not_ack %d", hdev->name, atomic_read(&hdev->cmd_cnt),
+					atomic_read(&hdev->cmd_not_ack));
 
 	if (!atomic_read(&hdev->cmd_cnt) && time_after(jiffies, hdev->cmd_last_tx + HZ)) {
 		BT_ERR("%s command tx timeout", hdev->name);
 		atomic_set(&hdev->cmd_cnt, 1);
+		atomic_add_unless(&hdev->cmd_not_ack, -1, 0);
 	}
 
 	/* Send queued commands */
-	if (atomic_read(&hdev->cmd_cnt) && (skb = skb_dequeue(&hdev->cmd_q))) {
-		kfree_skb(hdev->sent_cmd);
+	if (atomic_read(&hdev->cmd_cnt) > atomic_read(&hdev->cmd_not_ack)) {
+		skb = skb_dequeue(&hdev->cmd_q);
+		if (skb) {
+			kfree_skb(hdev->sent_cmd);
 
-		if ((hdev->sent_cmd = skb_clone(skb, GFP_ATOMIC))) {
-			atomic_dec(&hdev->cmd_cnt);
-			hci_send_frame(skb);
-			hdev->cmd_last_tx = jiffies;
-		} else {
-			skb_queue_head(&hdev->cmd_q, skb);
-			tasklet_schedule(&hdev->cmd_task);
+			hdev->sent_cmd = skb_clone(skb, GFP_ATOMIC);
+			if (hdev->sent_cmd) {
+				atomic_dec(&hdev->cmd_cnt);
+				atomic_inc(&hdev->cmd_not_ack);
+				hci_send_frame(skb);
+				hdev->cmd_last_tx = jiffies;
+			} else {
+				skb_queue_head(&hdev->cmd_q, skb);
+				tasklet_schedule(&hdev->cmd_task);
+			}
 		}
 	}
 }

@@ -24,6 +24,9 @@ static DEFINE_IDR(rtc_idr);
 static DEFINE_MUTEX(idr_lock);
 struct class *rtc_class;
 
+int rtc_delta = 1;
+EXPORT_SYMBOL(rtc_delta);
+
 static void rtc_device_release(struct device *dev)
 {
 	struct rtc_device *rtc = to_rtc_device(dev);
@@ -41,25 +44,55 @@ static void rtc_device_release(struct device *dev)
  */
 
 static struct timespec	delta;
+static struct timespec	delta_delta;
 static time_t		oldtime;
 
 static int rtc_suspend(struct device *dev, pm_message_t mesg)
 {
 	struct rtc_device	*rtc = to_rtc_device(dev);
 	struct rtc_time		tm;
-	struct timespec		ts = current_kernel_time();
+	struct timespec		ts;
+	struct timespec		new_delta;
 
+#ifdef CONFIG_MACH_SAMSUNG_U8500
+	struct rtc_time         sys_tm;
+	struct rtc_time         aprtc_tm;
+	struct timespec         aprtc_ts;
+#endif /* CONFIG_MACH_SAMSUNG_U8500 */
 	if (strcmp(dev_name(&rtc->dev), CONFIG_RTC_HCTOSYS_DEVICE) != 0)
 		return 0;
 
+	getnstimeofday(&ts);
 	rtc_read_time(rtc, &tm);
 	rtc_tm_to_time(&tm, &oldtime);
 
+#ifdef CONFIG_MACH_SAMSUNG_U8500
+	read_persistent_clock(&aprtc_ts);
+	rtc_time_to_tm(aprtc_ts.tv_sec, &aprtc_tm);
+	rtc_time_to_tm(ts.tv_sec, &sys_tm);
+
+	pr_info("[%s] AP RTC TIME: %04d.%02d.%02d - %02d:%02d:%02d called\n",
+		__func__, aprtc_tm.tm_year+1900, aprtc_tm.tm_mon+1, aprtc_tm.tm_mday,
+		aprtc_tm.tm_hour, aprtc_tm.tm_min, aprtc_tm.tm_sec);
+
+	pr_info("[%s] PMIC RTC TIME: %04d.%02d.%02d - %02d:%02d:%02d called\n",
+		__func__, tm.tm_year+1900, tm.tm_mon+1, tm.tm_mday,
+		tm.tm_hour, tm.tm_min, tm.tm_sec);
+
+	pr_info("[%s] SYSTEM TIME: %04d.%02d.%02d - %02d:%02d:%02d called\n",
+		__func__, sys_tm.tm_year+1900, sys_tm.tm_mon+1, sys_tm.tm_mday,
+		sys_tm.tm_hour, sys_tm.tm_min, sys_tm.tm_sec);
+#endif /* CONFIG_MACH_SAMSUNG_U8500 */
+
 	/* RTC precision is 1 second; adjust delta for avg 1/2 sec err */
-	set_normalized_timespec(&delta,
+	set_normalized_timespec(&new_delta,
 				ts.tv_sec - oldtime,
 				ts.tv_nsec - (NSEC_PER_SEC >> 1));
 
+	/* prevent 1/2 sec errors from accumulating */
+	delta_delta = timespec_sub(new_delta, delta);
+	if (delta_delta.tv_sec < -2 || delta_delta.tv_sec >= 2)
+		delta = new_delta;
 	return 0;
 }
 
@@ -69,16 +102,26 @@ static int rtc_resume(struct device *dev)
 	struct rtc_time		tm;
 	time_t			newtime;
 	struct timespec		time;
+#ifdef CONFIG_MACH_SAMSUNG_U8500
+	struct rtc_time		sys_tm;
+	struct rtc_time		aprtc_tm;
+	struct timespec		aprtc_ts;
+#endif /* CONFIG_MACH_SAMSUNG_U8500 */
 
 	if (strcmp(dev_name(&rtc->dev), CONFIG_RTC_HCTOSYS_DEVICE) != 0)
 		return 0;
 
+#ifdef CONFIG_MACH_SAMSUNG_U8500
+	read_persistent_clock(&aprtc_ts);
+#endif /* CONFIG_MACH_SAMSUNG_U8500 */
 	rtc_read_time(rtc, &tm);
 	if (rtc_valid_tm(&tm) != 0) {
 		pr_debug("%s:  bogus resume time\n", dev_name(&rtc->dev));
 		return 0;
 	}
 	rtc_tm_to_time(&tm, &newtime);
+	if (delta_delta.tv_sec < -1)
+		newtime++;
 	if (newtime <= oldtime) {
 		if (newtime < oldtime)
 			pr_debug("%s:  time travel!\n", dev_name(&rtc->dev));
@@ -92,6 +135,30 @@ static int rtc_resume(struct device *dev)
 				newtime + delta.tv_sec,
 				(NSEC_PER_SEC >> 1) + delta.tv_nsec);
 	do_settimeofday(&time);
+#ifdef CONFIG_MACH_SAMSUNG_U8500
+	rtc_time_to_tm(time.tv_sec, &sys_tm);
+	rtc_time_to_tm(aprtc_ts.tv_sec, &aprtc_tm);
+	pr_info("[%s] AP RTC TIME: %04d.%02d.%02d - %02d:%02d:%02d called\n",
+		__func__,
+		aprtc_tm.tm_year+1900, aprtc_tm.tm_mon+1, aprtc_tm.tm_mday,
+		aprtc_tm.tm_hour, aprtc_tm.tm_min, aprtc_tm.tm_sec);
+
+	pr_info("[%s] PMIC RTC TIME: %04d.%02d.%02d - %02d:%02d:%02d called\n",
+		__func__, tm.tm_year+1900, tm.tm_mon+1, tm.tm_mday,
+		tm.tm_hour, tm.tm_min, tm.tm_sec);
+
+	pr_info("[%s] SYSTEM TIME: %04d.%02d.%02d - %02d:%02d:%02d called\n",
+		__func__, sys_tm.tm_year+1900, sys_tm.tm_mon+1, sys_tm.tm_mday,
+		sys_tm.tm_hour, sys_tm.tm_min, sys_tm.tm_sec);
+
+	pr_info("[%s] delta.tv_sec: %d delta.tv_nsec: %d\n", __func__,
+		delta.tv_sec, delta.tv_nsec);
+	pr_info("[%s] delta_delta.tv_sec: %d delta_delta.tv_nsec: %d\n",
+		__func__, delta_delta.tv_sec, delta_delta.tv_nsec);
+
+	rtc_delta = delta.tv_sec;
+
+#endif /* CONFIG_MACH_SAMSUNG_U8500 */
 
 	return 0;
 }

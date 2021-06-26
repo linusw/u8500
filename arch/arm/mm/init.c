@@ -495,28 +495,33 @@ static void __init free_unused_memmap_node(int node, struct meminfo *mi)
 	unsigned int i;
 
 	/*
-	 * [FIXME] This relies on each bank being in address order.  This
-	 * may not be the case, especially if the user has provided the
-	 * information on the command line.
+	 * This relies on each bank being in address order.
+	 * The banks are sorted previously in bootmem_init().
 	 */
 	for_each_nodebank(i, mi, node) {
 		struct membank *bank = &mi->bank[i];
 
-		bank_start = bank_pfn_start(bank);
-		if (bank_start < prev_bank_end) {
-			printk(KERN_ERR "MEM: unordered memory banks.  "
-				"Not freeing memmap.\n");
-			break;
-		}
+		/*
+		 * Align down here since the VM subsystem insists that the
+		 * memmap entries are valid from the bank start aligned to
+		 * MAX_ORDER_NR_PAGES.
+		 */
+		bank_start = round_down(bank_pfn_start(bank),
+					MAX_ORDER_NR_PAGES);
 
 		/*
 		 * If we had a previous bank, and there is a space
 		 * between the current bank and the previous, free it.
 		 */
-		if (prev_bank_end && prev_bank_end != bank_start)
+		if (prev_bank_end && prev_bank_end < bank_start)
 			free_memmap(node, prev_bank_end, bank_start);
 
-		prev_bank_end = bank_pfn_end(bank);
+		/*
+		 * Align up here since the VM subsystem insists that the
+		 * memmap entries are valid from the bank end aligned to
+		 * MAX_ORDER_NR_PAGES.
+		 */
+		prev_bank_end = ALIGN(bank_pfn_end(bank), MAX_ORDER_NR_PAGES);
 	}
 }
 
@@ -529,6 +534,11 @@ void __init mem_init(void)
 {
 	unsigned long reserved_pages, free_pages;
 	int i, node;
+#ifdef CONFIG_HAVE_TCM
+	/* These pointers are filled in on TCM detection */
+	extern u32 dtcm_end;
+	extern u32 itcm_end;
+#endif
 
 #ifndef CONFIG_DISCONTIGMEM
 	max_mapnr   = pfn_to_page(max_pfn + PHYS_PFN_OFFSET) - mem_map;
@@ -611,6 +621,10 @@ void __init mem_init(void)
 
 	printk(KERN_NOTICE "Virtual kernel memory layout:\n"
 			"    vector  : 0x%08lx - 0x%08lx   (%4ld kB)\n"
+#ifdef CONFIG_HAVE_TCM
+			"    DTCM    : 0x%08lx - 0x%08lx   (%4ld kB)\n"
+			"    ITCM    : 0x%08lx - 0x%08lx   (%4ld kB)\n"
+#endif
 			"    fixmap  : 0x%08lx - 0x%08lx   (%4ld kB)\n"
 #ifdef CONFIG_MMU
 			"    DMA     : 0x%08lx - 0x%08lx   (%4ld MB)\n"
@@ -627,6 +641,10 @@ void __init mem_init(void)
 
 			MLK(UL(CONFIG_VECTORS_BASE), UL(CONFIG_VECTORS_BASE) +
 				(PAGE_SIZE)),
+#ifdef CONFIG_HAVE_TCM
+			MLK(DTCM_OFFSET, (unsigned long) dtcm_end),
+			MLK(ITCM_OFFSET, (unsigned long) itcm_end),
+#endif
 			MLK(FIXADDR_START, FIXADDR_TOP),
 #ifdef CONFIG_MMU
 			MLM(CONSISTENT_BASE, CONSISTENT_END),

@@ -44,9 +44,9 @@ static void
 vxfs_typdump(struct vxfs_typed *typ)
 {
 	printk(KERN_DEBUG "type=%Lu ", typ->vt_hdr >> VXFS_TYPED_TYPESHIFT);
-	printk("offset=%Lx ", typ->vt_hdr & VXFS_TYPED_OFFSETMASK);
-	printk("block=%x ", typ->vt_block);
-	printk("size=%x\n", typ->vt_size);
+	printk(KERN_INFO "offset=%Lx ", typ->vt_hdr & VXFS_TYPED_OFFSETMASK);
+	printk(KERN_INFO "block=%x ", typ->vt_block);
+	printk(KERN_INFO "size=%x\n", typ->vt_size);
 }
 #endif
 
@@ -102,7 +102,7 @@ vxfs_bmap_ext4(struct inode *ip, long bn)
 	return 0;
 
 fail_size:
-	printk("vxfs: indirect extent too big!\n");
+	printk(KERN_INFO "vxfs: indirect extent too big!\n");
 fail_buf:
 	return 0;
 }

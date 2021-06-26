@@ -12,7 +12,7 @@
 void hpfs_lock_creation(struct super_block *s)
 {
 #ifdef DEBUG_LOCKS
-	printk("lock creation\n");
+	printk(KERN_INFO "lock creation\n");
 #endif
 	down(&hpfs_sb(s)->hpfs_creation_de);
 }
@@ -20,7 +20,7 @@ void hpfs_lock_creation(struct super_block *s)
 void hpfs_unlock_creation(struct super_block *s)
 {
 #ifdef DEBUG_LOCKS
-	printk("unlock creation\n");
+	printk(KERN_INFO "unlock creation\n");
 #endif
 	up(&hpfs_sb(s)->hpfs_creation_de);
 }
@@ -38,7 +38,7 @@ void *hpfs_map_sector(struct super_block *s, unsigned secno, struct buffer_head 
 	if (bh != NULL)
 		return bh->b_data;
 	else {
-		printk("HPFS: hpfs_map_sector: read error\n");
+		printk(KERN_INFO "HPFS: hpfs_map_sector: read error\n");
 		return NULL;
 	}
 }
@@ -57,7 +57,7 @@ void *hpfs_get_sector(struct super_block *s, unsigned secno, struct buffer_head 
 		set_buffer_uptodate(bh);
 		return bh->b_data;
 	} else {
-		printk("HPFS: hpfs_get_sector: getblk failed\n");
+		printk(KERN_INFO "HPFS: hpfs_get_sector: getblk failed\n");
 		return NULL;
 	}
 }
@@ -73,13 +73,13 @@ void *hpfs_map_4sectors(struct super_block *s, unsigned secno, struct quad_buffe
 	cond_resched();
 
 	if (secno & 3) {
-		printk("HPFS: hpfs_map_4sectors: unaligned read\n");
+		printk(KERN_INFO "HPFS: hpfs_map_4sectors: unaligned read\n");
 		return NULL;
 	}
 
 	qbh->data = data = kmalloc(2048, GFP_NOFS);
 	if (!data) {
-		printk("HPFS: hpfs_map_4sectors: out of memory\n");
+		printk(KERN_INFO "HPFS: hpfs_map_4sectors: out of memory\n");
 		goto bail;
 	}
 
@@ -113,7 +113,7 @@ void *hpfs_map_4sectors(struct super_block *s, unsigned secno, struct quad_buffe
 	brelse(qbh->bh[0]);
  bail0:
 	kfree(data);
-	printk("HPFS: hpfs_map_4sectors: read error\n");
+	printk(KERN_INFO "HPFS: hpfs_map_4sectors: read error\n");
  bail:
 	return NULL;
 }
@@ -126,13 +126,13 @@ void *hpfs_get_4sectors(struct super_block *s, unsigned secno,
 	cond_resched();
 
 	if (secno & 3) {
-		printk("HPFS: hpfs_get_4sectors: unaligned read\n");
+		printk(KERN_INFO "HPFS: hpfs_get_4sectors: unaligned read\n");
 		return NULL;
 	}
 
 	/*return hpfs_map_4sectors(s, secno, qbh, 0);*/
 	if (!(qbh->data = kmalloc(2048, GFP_NOFS))) {
-		printk("HPFS: hpfs_get_4sectors: out of memory\n");
+		printk(KERN_INFO "HPFS: hpfs_get_4sectors: out of memory\n");
 		return NULL;
 	}
 	if (!(hpfs_get_sector(s, secno, &qbh->bh[0]))) goto bail0;

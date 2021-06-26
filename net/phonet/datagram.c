@@ -52,6 +52,19 @@ static int pn_ioctl(struct sock *sk, int cmd, unsigned long arg)
 		answ = skb ? skb->len : 0;
 		release_sock(sk);
 		return put_user(answ, (int __user *)arg);
+
+	case SIOCPNADDRESOURCE:
+	case SIOCPNDELRESOURCE: {
+			u32 res;
+			if (get_user(res, (u32 __user *)arg))
+				return -EFAULT;
+			if (res >= 256)
+				return -EINVAL;
+			if (cmd == SIOCPNADDRESOURCE)
+				return pn_sock_bind_res(sk, res);
+			else
+				return pn_sock_unbind_res(sk, res);
+		}
 	}
 
 	return -ENOIOCTLCMD;
@@ -151,6 +164,13 @@ static int pn_recvmsg(struct kiocb *iocb, struct sock *sk,
 	if (msg->msg_name != NULL)
 		memcpy(msg->msg_name, &sa, sizeof(struct sockaddr_pn));
 
+#ifdef CONFIG_SAMSUNG_PHONE_SVNET
+	/* svent RX debugging */
+	if (sk->sk_receive_queue.qlen > 30)
+		printk(KERN_DEBUG "svn %s, sk = %p, qlen = %d\n", __func__, sk,
+			sk->sk_receive_queue.qlen);
+#endif
+
 out:
 	skb_free_datagram(sk, skb);
 
@@ -162,7 +182,12 @@ out_nofree:
 static int pn_backlog_rcv(struct sock *sk, struct sk_buff *skb)
 {
 	int err = sock_queue_rcv_skb(sk, skb);
-
+#ifdef CONFIG_SAMSUNG_PHONE_SVNET
+	/* svent RX debugging */
+	if (sk->sk_receive_queue.qlen > 30)
+		printk(KERN_DEBUG "svn %s, sk = %p, qlen = %d\n", __func__, sk,
+			sk->sk_receive_queue.qlen);
+#endif
 	if (err < 0)
 		kfree_skb(skb);
 	return err ? NET_RX_DROP : NET_RX_SUCCESS;

@@ -509,14 +509,14 @@ static int __init vfp_init(void)
 
 	printk(KERN_INFO "VFP support v0.3: ");
 	if (VFP_arch)
-		printk("not present\n");
+		printk(KERN_INFO "not present\n");
 	else if (vfpsid & FPSID_NODOUBLE) {
-		printk("no double precision support\n");
+		printk(KERN_INFO "no double precision support\n");
 	} else {
 		smp_call_function(vfp_enable, NULL, 1);
 
 		VFP_arch = (vfpsid & FPSID_ARCH_MASK) >> FPSID_ARCH_BIT;  /* Extract the architecture version */
-		printk("implementor %02x architecture %d part %02x variant %x rev %x\n",
+		printk(KERN_INFO "implementor %02x architecture %d part %02x variant %x rev %x\n",
 			(vfpsid & FPSID_IMPLEMENTER_MASK) >> FPSID_IMPLEMENTER_BIT,
 			(vfpsid & FPSID_ARCH_MASK) >> FPSID_ARCH_BIT,
 			(vfpsid & FPSID_PART_MASK) >> FPSID_PART_BIT,

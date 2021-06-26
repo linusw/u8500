@@ -21,16 +21,34 @@
 #include <asm/localtimer.h>
 #include <asm/smp_scu.h>
 #include <mach/hardware.h>
+#include <mach/setup.h>
 
 /*
  * control for which core is the next to come out of the secondary
  * boot "holding pen"
  */
-volatile int __cpuinitdata pen_release = -1;
+volatile int pen_release = -1;
+
+static void __iomem *scu_base_addr(void)
+{
+	if (cpu_is_u5500())
+		return __io_address(U5500_SCU_BASE);
+	else if (cpu_is_u8500())
+		return __io_address(U8500_SCU_BASE);
+	else
+		ux500_unknown_soc();
+
+	return NULL;
+}
 
 static unsigned int __init get_core_count(void)
 {
-	return scu_get_core_count(__io_address(UX500_SCU_BASE));
+	void __iomem *scu_base = scu_base_addr();
+
+	if (scu_base)
+		return scu_get_core_count(scu_base);
+
+	return 1;
 }
 
 static DEFINE_SPINLOCK(boot_lock);
@@ -44,7 +62,7 @@ void __cpuinit platform_secondary_init(unsigned int cpu)
 	 * core (e.g. timer irq), then they will not have been enabled
 	 * for us: do so
 	 */
-	gic_cpu_init(0, __io_address(UX500_GIC_CPU_BASE));
+	gic_cpu_init(0, gic_cpu_base_addr);
 
 	/*
 	 * let the primary processor know we're out of the
@@ -78,6 +96,8 @@ int __cpuinit boot_secondary(unsigned int cpu, struct task_struct *idle)
 	__cpuc_flush_dcache_area((void *)&pen_release, sizeof(pen_release));
 	outer_clean_range(__pa(&pen_release), __pa(&pen_release) + 1);
 
+	smp_cross_call(cpumask_of(cpu));
+
 	timeout = jiffies + (1 * HZ);
 	while (time_before(jiffies, timeout)) {
 		if (pen_release == -1)
@@ -95,6 +115,15 @@ int __cpuinit boot_secondary(unsigned int cpu, struct task_struct *idle)
 
 static void __init wakeup_secondary(void)
 {
+	void __iomem *backupram;
+
+	if (cpu_is_u5500())
+		backupram = __io_address(U5500_BACKUPRAM0_BASE);
+	else if (cpu_is_u8500())
+		backupram = __io_address(U8500_BACKUPRAM0_BASE);
+	else
+		ux500_unknown_soc();
+
 	/* nobody is to be released from the pen yet */
 	pen_release = -1;
 
@@ -104,15 +133,13 @@ static void __init wakeup_secondary(void)
 	 * backup ram register at offset 0x1FF0, which is what boot rom code
 	 * is waiting for. This would wake up the secondary core from WFE
 	 */
-#define U8500_CPU1_JUMPADDR_OFFSET 0x1FF4
+#define UX500_CPU1_JUMPADDR_OFFSET 0x1FF4
 	__raw_writel(virt_to_phys(u8500_secondary_startup),
-		__io_address(UX500_BACKUPRAM0_BASE) +
-		U8500_CPU1_JUMPADDR_OFFSET);
+		     backupram + UX500_CPU1_JUMPADDR_OFFSET);
 
-#define U8500_CPU1_WAKEMAGIC_OFFSET 0x1FF0
+#define UX500_CPU1_WAKEMAGIC_OFFSET 0x1FF0
 	__raw_writel(0xA1FEED01,
-		__io_address(UX500_BACKUPRAM0_BASE) +
-		U8500_CPU1_WAKEMAGIC_OFFSET);
+		     backupram + UX500_CPU1_WAKEMAGIC_OFFSET);
 
 	/* make sure write buffer is drained */
 	mb();
@@ -166,13 +193,10 @@ void __init smp_prepare_cpus(unsigned int max_cpus)
 	for (i = 0; i < max_cpus; i++)
 		set_cpu_present(i, true);
 
+	percpu_timer_setup();
+
 	if (max_cpus > 1) {
-		/*
-		 * Enable the local timer or broadcast device for the
-		 * boot CPU, but only if we have more than one CPU.
-		 */
-		percpu_timer_setup();
-		scu_enable(__io_address(UX500_SCU_BASE));
+		scu_enable(scu_base_addr());
 		wakeup_secondary();
 	}
 }

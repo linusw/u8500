@@ -309,7 +309,7 @@ void c2_ae_event(struct c2_dev *c2dev, u32 mq_index)
 	}
 
 	default:
-		printk("Bad resource indicator = %d\n",
+		printk(KERN_INFO "Bad resource indicator = %d\n",
 		       resource_indicator);
 		break;
 	}

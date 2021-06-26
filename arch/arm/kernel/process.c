@@ -35,6 +35,7 @@
 #include <asm/thread_notify.h>
 #include <asm/stacktrace.h>
 #include <asm/mach/time.h>
+#include <asm/cacheflush.h>
 
 static const char *processor_modes[] = {
   "USER_26", "FIQ_26" , "IRQ_26" , "SVC_26" , "UK4_26" , "UK5_26" , "UK6_26" , "UK7_26" ,
@@ -82,8 +83,25 @@ static int __init hlt_setup(char *__unused)
 __setup("nohlt", nohlt_setup);
 __setup("hlt", hlt_setup);
 
+#ifdef CONFIG_SAMSUNG_KERNEL_DEBUG
+unsigned int unhandled_reset_count = 0;
+#endif /* CONFIG_SAMSUNG_KERNEL_DEBUG */
+
 void arm_machine_restart(char mode, const char *cmd)
 {
+#ifdef CONFIG_SAMSUNG_KERNEL_DEBUG
+	int i;
+
+	printk( "arm_machine_restart: mode: %c, cmd: %s\n", mode, cmd ) ;
+	/* reboot mode = Lockup */
+	if( 'L' == mode || 'U' == mode)	{
+		for(i=0; i<100; i++) {
+			arch_reset(mode, NULL);
+			unhandled_reset_count++;
+		}
+	}
+#endif /* CONFIG_SAMSUNG_KERNEL_DEBUG */
+
 	/*
 	 * Clean and disable cache, and turn off interrupts
 	 */
@@ -150,8 +168,17 @@ void cpu_idle(void)
 		leds_event(led_idle_start);
 		while (!need_resched()) {
 #ifdef CONFIG_HOTPLUG_CPU
-			if (cpu_is_offline(smp_processor_id()))
+			if (cpu_is_offline(smp_processor_id())) {
+
+				/* NOTE : preempt_count() should be 0 for dying CPU
+				*        as the CPU will use this very thread when
+				*        it is alive
+				*/
+				if (preempt_count())
+					preempt_enable_no_resched();
+
 				cpu_die();
+			}
 #endif
 
 			local_irq_disable();
@@ -202,7 +229,88 @@ void machine_power_off(void)
 
 void machine_restart(char *cmd)
 {
+	printk( "machine_restart: cmd: %s\n", cmd ) ;
+#ifdef CONFIG_SAMSUNG_KERNEL_DEBUG
+	/*reboot_mode = cmd[0];//kernel will crash at reboot-time. d.moskvitin */
+	if (cmd) 
+		reboot_mode = cmd[0];
+
+	printk( "machine_restart: reboot_mode: %c\n", reboot_mode ) ;
+#endif /* CONFIG_SAMSUNG_KERNEL_DEBUG */
+
+        printk( "machine_restart: arm_pm_restart: 0x%x\n", arm_pm_restart ) ;
 	arm_pm_restart(reboot_mode, cmd);
+}
+
+/*
+ * dump a block of kernel memory from around the given address
+ */
+static void show_data(unsigned long addr, int nbytes, const char *name)
+{
+	int	i, j;
+	int	nlines;
+	u32	*p;
+
+	/*
+	 * don't attempt to dump non-kernel addresses or
+	 * values that are probably just small negative numbers
+	 */
+	if (addr < PAGE_OFFSET || addr > -256UL)
+		return;
+
+	printk("\n%s: %#lx:\n", name, addr);
+
+	/*
+	 * round address down to a 32 bit boundary
+	 * and always dump a multiple of 32 bytes
+	 */
+	p = (u32 *)(addr & ~(sizeof(u32) - 1));
+	nbytes += (addr & (sizeof(u32) - 1));
+	nlines = (nbytes + 31) / 32;
+
+
+	for (i = 0; i < nlines; i++) {
+		/*
+		 * just display low 16 bits of address to keep
+		 * each line of the dump < 80 characters
+		 */
+		printk("%04lx ", (unsigned long)p & 0xffff);
+		for (j = 0; j < 8; j++) {
+			u32	data;
+			if (probe_kernel_address(p, data)) {
+				printk(" ********");
+			} else {
+				printk(" %08x", data);
+			}
+			++p;
+		}
+		printk("\n");
+	}
+}
+
+static void show_extra_register_data(struct pt_regs *regs, int nbytes)
+{
+	mm_segment_t fs;
+
+	fs = get_fs();
+	set_fs(KERNEL_DS);
+	show_data(regs->ARM_pc - nbytes, nbytes * 2, "PC");
+	show_data(regs->ARM_lr - nbytes, nbytes * 2, "LR");
+	show_data(regs->ARM_sp - nbytes, nbytes * 2, "SP");
+	show_data(regs->ARM_ip - nbytes, nbytes * 2, "IP");
+	show_data(regs->ARM_fp - nbytes, nbytes * 2, "FP");
+	show_data(regs->ARM_r0 - nbytes, nbytes * 2, "R0");
+	show_data(regs->ARM_r1 - nbytes, nbytes * 2, "R1");
+	show_data(regs->ARM_r2 - nbytes, nbytes * 2, "R2");
+	show_data(regs->ARM_r3 - nbytes, nbytes * 2, "R3");
+	show_data(regs->ARM_r4 - nbytes, nbytes * 2, "R4");
+	show_data(regs->ARM_r5 - nbytes, nbytes * 2, "R5");
+	show_data(regs->ARM_r6 - nbytes, nbytes * 2, "R6");
+	show_data(regs->ARM_r7 - nbytes, nbytes * 2, "R7");
+	show_data(regs->ARM_r8 - nbytes, nbytes * 2, "R8");
+	show_data(regs->ARM_r9 - nbytes, nbytes * 2, "R9");
+	show_data(regs->ARM_r10 - nbytes, nbytes * 2, "R10");
+	set_fs(fs);
 }
 
 void __show_regs(struct pt_regs *regs)
@@ -264,6 +372,8 @@ void __show_regs(struct pt_regs *regs)
 		printk("Control: %08x%s\n", ctrl, buf);
 	}
 #endif
+
+	show_extra_register_data(regs, 128);
 }
 
 void show_regs(struct pt_regs * regs)

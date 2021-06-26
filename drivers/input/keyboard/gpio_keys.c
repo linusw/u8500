@@ -25,6 +25,22 @@
 #include <linux/gpio_keys.h>
 #include <linux/workqueue.h>
 #include <linux/gpio.h>
+#include <mach/sec_common.h>
+#include <mach/sec_param.h>
+
+/* Forced Upload Mode */
+struct timer_list debug_timer;
+struct gpio_keys_platform_data *g_pdata;
+
+static bool g_bVolUp;
+static bool g_bPower;
+static bool g_bHome;
+
+extern unsigned int system_rev;
+
+/* Forced Upload Mode */
+extern int jack_is_detected;
+
 
 struct gpio_button_data {
 	struct gpio_keys_button *button;
@@ -32,6 +48,7 @@ struct gpio_button_data {
 	struct timer_list timer;
 	struct work_struct work;
 	bool disabled;
+	bool key_state;
 };
 
 struct gpio_keys_drvdata {
@@ -302,11 +319,71 @@ static DEVICE_ATTR(disabled_switches, S_IWUSR | S_IRUGO,
 		   gpio_keys_show_disabled_switches,
 		   gpio_keys_store_disabled_switches);
 
+
+static ssize_t key_pressed_show(struct device *dev,
+				struct device_attribute *attr, char *buf)
+{
+	struct platform_device *pdev = to_platform_device(dev);
+	struct gpio_keys_drvdata *ddata = platform_get_drvdata(pdev);
+	int i;
+	int keystate = 0;
+
+	for (i = 0; i < ddata->n_buttons; i++) {
+		struct gpio_button_data *bdata = &ddata->data[i];
+		keystate |= bdata->key_state;
+	}
+
+	if (keystate)
+		sprintf(buf, "PRESS");
+	else
+		sprintf(buf, "RELEASE");
+
+	return strlen(buf);
+}
+
+/* the volume keys can be the wakeup keys in special case */
+static ssize_t wakeup_enable(struct device *dev,
+	struct device_attribute *attr, char *buf, size_t count)
+{
+	struct platform_device *pdev = to_platform_device(dev);
+	struct gpio_keys_drvdata *ddata = platform_get_drvdata(pdev);
+
+	int n_events = get_n_events_by_type(EV_KEY);
+	unsigned long *bits;
+	ssize_t error;
+	int i;
+
+	bits = kcalloc(BITS_TO_LONGS(n_events), sizeof(*bits), GFP_KERNEL);
+	if (!bits)
+		return -ENOMEM;
+
+	error = bitmap_parselist(buf, bits, n_events);
+	if (error)
+		goto out;
+
+	for (i = 0; i < ddata->n_buttons; i++) {
+		struct gpio_button_data *button = &ddata->data[i];
+		if (test_bit(button->button->code, bits))
+			button->button->wakeup = 1;
+		else
+			button->button->wakeup = 0;
+	}
+
+out:
+	kfree(bits);
+	return count;
+}
+
+static DEVICE_ATTR(key_pressed, 0664, key_pressed_show, NULL);
+static DEVICE_ATTR(wakeup_keys, S_IWUSR, NULL, wakeup_enable);
+
 static struct attribute *gpio_keys_attrs[] = {
 	&dev_attr_keys.attr,
 	&dev_attr_switches.attr,
+	&dev_attr_key_pressed.attr,
 	&dev_attr_disabled_keys.attr,
 	&dev_attr_disabled_switches.attr,
+	&dev_attr_wakeup_keys.attr,
 	NULL,
 };
 
@@ -314,12 +391,100 @@ static struct attribute_group gpio_keys_attr_group = {
 	.attrs = gpio_keys_attrs,
 };
 
+extern void dump_all_task_info(void);
+extern void dump_cpu_stat(void);
+void enter_upload_mode(unsigned long val)
+{
+	bool uploadmode = true;
+	int i;
+	struct gpio_keys_button *pButton;
+
+	/* printk(KERN_DEBUG "[KEY] %s\n", __func__); */
+
+	/* if( g_bVolUp && g_bHome && g_bPower ) */
+	if (g_bVolUp && jack_is_detected && g_bPower) {
+		dump_all_task_info();
+		dump_cpu_stat();
+		panic("__forced_upload");
+	}
+
+}
+
+void gpio_keys_setstate(int keycode, bool bState)
+{
+	switch (keycode) {
+	case KEY_VOLUMEUP:
+		g_bVolUp = bState;
+		break;
+	case KEY_POWER:
+		g_bPower = bState;
+		break;
+	case KEY_HOME:
+		g_bHome = bState;
+		break;
+	default:
+		break;
+	}
+}
+
+bool gpio_keys_getstate(int keycode)
+{
+	switch (keycode) {
+	case KEY_VOLUMEUP:
+		return g_bVolUp;
+	case KEY_POWER:
+		return g_bPower;
+	case KEY_HOME:
+		return g_bHome;
+	default:
+		break;
+	}
+	return 0;
+}
+EXPORT_SYMBOL(gpio_keys_getstate);
+
+void gpio_keys_start_upload_modtimer(void)
+{
+	mod_timer(&debug_timer, jiffies + HZ*2);
+	printk(KERN_WARNING "[Key] Waiting for upload mode for 2 seconds.\n");
+}
+EXPORT_SYMBOL(gpio_keys_start_upload_modtimer);
+
+#if defined(CONFIG_MACH_GAVINI)
+extern void ProjectorPowerOnSequence();
+extern void ProjectorPowerOffSequence();
+extern void projector_motor_cw(void);
+extern void projector_motor_ccw(void);
+#endif
+
 static void gpio_keys_report_event(struct gpio_button_data *bdata)
 {
 	struct gpio_keys_button *button = bdata->button;
 	struct input_dev *input = bdata->input;
 	unsigned int type = button->type ?: EV_KEY;
 	int state = (gpio_get_value(button->gpio) ? 1 : 0) ^ button->active_low;
+
+#if !defined(CONFIG_SAMSUNG_PRODUCT_SHIP)
+	printk(KERN_DEBUG "[KEY] key: %s gpio_keys_report_event state = %d \n",
+		button->desc, state);
+#endif
+	bdata->key_state = !!state;
+
+	/* Forced Upload Mode checker */
+	bool bState = false;
+
+	bState = state ? true : false;
+
+	switch (button->code) {
+	case KEY_VOLUMEUP:
+		g_bVolUp = bState;
+		break;
+	case KEY_HOME:
+		g_bHome = bState;
+		break;
+	default:
+		break;
+	}
 
 	input_event(input, type, button->code, !!state);
 	input_sync(input);
@@ -368,6 +533,7 @@ static int __devinit gpio_keys_setup_key(struct platform_device *pdev,
 	setup_timer(&bdata->timer, gpio_keys_timer, (unsigned long)bdata);
 	INIT_WORK(&bdata->work, gpio_keys_work_func);
 
+#ifdef CONFIG_UNOFFCIAL_STE_IRQ_HACK
 	error = gpio_request(button->gpio, desc);
 	if (error < 0) {
 		dev_err(dev, "failed to request GPIO %d, error %d\n",
@@ -382,7 +548,7 @@ static int __devinit gpio_keys_setup_key(struct platform_device *pdev,
 			button->gpio, error);
 		goto fail3;
 	}
-
+#endif
 	irq = gpio_to_irq(button->gpio);
 	if (irq < 0) {
 		error = irq;
@@ -398,6 +564,9 @@ static int __devinit gpio_keys_setup_key(struct platform_device *pdev,
 	 */
 	if (!button->can_disable)
 		irqflags |= IRQF_SHARED;
+
+	if (button->wakeup)
+		irqflags |= IRQF_NO_SUSPEND;
 
 	error = request_irq(irq, gpio_keys_isr, irqflags, desc, bdata);
 	if (error) {
@@ -432,7 +601,6 @@ static int __devinit gpio_keys_probe(struct platform_device *pdev)
 		error = -ENOMEM;
 		goto fail1;
 	}
-
 	ddata->input = input;
 	ddata->n_buttons = pdata->nbuttons;
 	mutex_init(&ddata->disable_lock);
@@ -490,6 +658,11 @@ static int __devinit gpio_keys_probe(struct platform_device *pdev)
 	input_sync(input);
 
 	device_init_wakeup(&pdev->dev, wakeup);
+
+	/* Initialize for Forced Upload mode */
+	g_pdata = pdata;
+	init_timer(&debug_timer);
+	debug_timer.function = enter_upload_mode;
 
 	return 0;
 

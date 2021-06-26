@@ -14,6 +14,9 @@
 #include <linux/mfd/core.h>
 #include <linux/mfd/tc35892.h>
 
+#define TC35892_CLKMODE_MODCTL_SLEEP		0x0
+#define TC35892_CLKMODE_MODCTL_OPERATION	(1 << 0)
+
 /**
  * tc35892_reg_read() - read a single TC35892 register
  * @tc35892:	Device to read from
@@ -142,6 +145,7 @@ static irqreturn_t tc35892_irq(int irq, void *data)
 	struct tc35892 *tc35892 = data;
 	int status;
 
+again:
 	status = tc35892_reg_read(tc35892, TC35892_IRQST);
 	if (status < 0)
 		return IRQ_NONE;
@@ -156,9 +160,12 @@ static irqreturn_t tc35892_irq(int irq, void *data)
 	/*
 	 * A dummy read or write (to any register) appears to be necessary to
 	 * have the last interrupt clear (for example, GPIO IC write) take
-	 * effect.
+	 * effect. In such a case, recheck for any interrupt which is still
+	 * pending.
 	 */
-	tc35892_reg_read(tc35892, TC35892_IRQST);
+	status = tc35892_reg_read(tc35892, TC35892_IRQST);
+	if (status)
+		goto again;
 
 	return IRQ_HANDLED;
 }
@@ -227,12 +234,15 @@ static int tc35892_chip_init(struct tc35892 *tc35892)
 
 	dev_info(tc35892->dev, "manufacturer: %#x, version: %#x\n", manf, ver);
 
-	/* Put everything except the IRQ module into reset */
+	/*
+	 * Put everything except the IRQ module into reset;
+	 * also spare the GPIO module for any pin initialization
+	 * done during pre-kernel boot
+	 */
 	ret = tc35892_reg_write(tc35892, TC35892_RSTCTRL,
 				TC35892_RSTCTRL_TIMRST
 				| TC35892_RSTCTRL_ROTRST
-				| TC35892_RSTCTRL_KBDRST
-				| TC35892_RSTCTRL_GPIRST);
+				| TC35892_RSTCTRL_KBDRST);
 	if (ret < 0)
 		return ret;
 
@@ -314,6 +324,151 @@ static int __devexit tc35892_remove(struct i2c_client *client)
 	return 0;
 }
 
+#ifdef CONFIG_PM
+
+static u32 sleep_regs[] = {
+	TC35892_IOPC0_L,
+	TC35892_IOPC0_H,
+	TC35892_IOPC1_L,
+	TC35892_IOPC1_H,
+	TC35892_IOPC2_L,
+	TC35892_IOPC2_H,
+	TC35892_DRIVE0_L,
+	TC35892_DRIVE0_H,
+	TC35892_DRIVE1_L,
+	TC35892_DRIVE1_H,
+	TC35892_DRIVE2_L,
+	TC35892_DRIVE2_H,
+	TC35892_DRIVE3,
+	TC35892_GPIODATA0,
+	TC35892_GPIOMASK0,
+	TC35892_GPIODATA1,
+	TC35892_GPIOMASK1,
+	TC35892_GPIODATA2,
+	TC35892_GPIOMASK2,
+	TC35892_GPIODIR0,
+	TC35892_GPIODIR1,
+	TC35892_GPIODIR2,
+	TC35892_GPIOIE0,
+	TC35892_GPIOIE1,
+	TC35892_GPIOIE2,
+	TC35892_RSTCTRL,
+	TC35892_CLKCFG,
+};
+
+static u8 sleep_regs_val[] = {
+	0x00,		/* TC35892_IOPC0_L */
+	0x00,		/* TC35892_IOPC0_H */
+	0x00,		/* TC35892_IOPC1_L */
+	0x00,		/* TC35892_IOPC1_H */
+	0x00,		/* TC35892_IOPC2_L */
+	0x00,		/* TC35892_IOPC2_H */
+	0xff,		/* TC35892_DRIVE0_L */
+	0xff,		/* TC35892_DRIVE0_H */
+	0xff,		/* TC35892_DRIVE1_L */
+	0xff,		/* TC35892_DRIVE1_H */
+	0xff,		/* TC35892_DRIVE2_L */
+	0xff,		/* TC35892_DRIVE2_H */
+	0x0f,		/* TC35892_DRIVE3 */
+	0x80,		/* TC35892_GPIODATA0 */
+	0x80,		/* TC35892_GPIOMASK0 */
+	0x80,		/* TC35892_GPIODATA1 */
+	0x80,		/* TC35892_GPIOMASK1 */
+	0x06,		/* TC35892_GPIODATA2 */
+	0x06,		/* TC35892_GPIOMASK2 */
+	0xf0,		/* TC35892_GPIODIR0 */
+	0xe0,		/* TC35892_GPIODIR1 */
+	0xee,		/* TC35892_GPIODIR2 */
+	0x0f,		/* TC35892_GPIOIE0 */
+	0x1f,		/* TC35892_GPIOIE1 */
+	0x11,		/* TC35892_GPIOIE2 */
+	0x0f,		/* TC35892_RSTCTRL */
+	0xb0		/* TC35892_CLKCFG */
+
+};
+
+static u8 sleep_regs_backup[ARRAY_SIZE(sleep_regs)];
+
+static int tc35892_suspend(struct device *dev)
+{
+	struct tc35892 *tc35892 = dev_get_drvdata(dev);
+	struct i2c_client *client = tc35892->i2c;
+	int ret = 0;
+	int i, j;
+	int val;
+
+	/* Put the system to sleep mode */
+	if (!device_may_wakeup(&client->dev)) {
+		for (i = 0; i < ARRAY_SIZE(sleep_regs); i++) {
+			val = tc35892_reg_read(tc35892,
+					       sleep_regs[i]);
+			if (val < 0)
+				goto out;
+
+			sleep_regs_backup[i] = (u8) (val & 0xff);
+		}
+
+		for (i = 0; i < ARRAY_SIZE(sleep_regs); i++) {
+			ret = tc35892_reg_write(tc35892,
+					  sleep_regs[i],
+					  sleep_regs_val[i]);
+			if (ret < 0)
+				goto fail;
+
+		}
+
+		ret = tc35892_reg_write(tc35892,
+					TC35892_CLKMODE,
+					TC35892_CLKMODE_MODCTL_SLEEP);
+	}
+out:
+	return ret;
+fail:
+	for (j = 0; j <= i; j++) {
+		ret = tc35892_reg_write(tc35892,
+					sleep_regs[i],
+					sleep_regs_backup[i]);
+		if (ret < 0)
+			break;
+	}
+	return ret;
+}
+
+static int tc35892_resume(struct device *dev)
+{
+	struct tc35892 *tc35892 = dev_get_drvdata(dev);
+	struct i2c_client *client = tc35892->i2c;
+	int ret = 0;
+	int i;
+
+	/* Enable the system into operation */
+	if (!device_may_wakeup(&client->dev))
+	{
+		ret = tc35892_reg_write(tc35892,
+					TC35892_CLKMODE,
+					TC35892_CLKMODE_MODCTL_OPERATION);
+		if (ret < 0)
+			goto out;
+
+		for (i = ARRAY_SIZE(sleep_regs) - 1; i >= 0; i--) {
+			ret = tc35892_reg_write(tc35892,
+						sleep_regs[i],
+						sleep_regs_backup[i]);
+			/* Not much to do here if we fail */
+			if (ret < 0)
+				break;
+		}
+	}
+out:
+	return ret;
+}
+
+static const struct dev_pm_ops tc35892_dev_pm_ops = {
+	.suspend = tc35892_suspend,
+	.resume  = tc35892_resume,
+};
+#endif
+
 static const struct i2c_device_id tc35892_id[] = {
 	{ "tc35892", 24 },
 	{ }
@@ -323,6 +478,9 @@ MODULE_DEVICE_TABLE(i2c, tc35892_id);
 static struct i2c_driver tc35892_driver = {
 	.driver.name	= "tc35892",
 	.driver.owner	= THIS_MODULE,
+#ifdef CONFIG_PM
+	.driver.pm      = &tc35892_dev_pm_ops,
+#endif
 	.probe		= tc35892_probe,
 	.remove		= __devexit_p(tc35892_remove),
 	.id_table	= tc35892_id,

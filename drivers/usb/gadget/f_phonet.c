@@ -31,7 +31,10 @@
 
 #include <linux/usb/ch9.h>
 #include <linux/usb/cdc.h>
-#include <linux/usb/composite.h>
+#include <linux/usb/android_composite.h>
+#include <linux/phonet.h>
+#include <net/phonet/pn_dev.h>
+
 
 #include "u_phonet.h"
 
@@ -40,7 +43,7 @@
 #if (PAGE_SIZE % MAXPACKET)
 #error MAXPACKET must divide PAGE_SIZE!
 #endif
-
+#define DBG_MSG(fmt, args...) printk(KERN_INFO "[f_phonet] %s:%d "fmt, __func__, __LINE__, ##args)
 /*-------------------------------------------------------------------------*/
 
 struct phonet_port {
@@ -198,11 +201,15 @@ static struct usb_descriptor_header *hs_pn_function[] = {
 static int pn_net_open(struct net_device *dev)
 {
 	netif_wake_queue(dev);
+
+	/* Default route is PN_DEV_PC for this Phonet interface */
+	phonet_route_add(dev, PN_DEV_PC);
 	return 0;
 }
 
 static int pn_net_close(struct net_device *dev)
 {
+	phonet_route_del(dev, PN_DEV_PC);
 	netif_stop_queue(dev);
 	return 0;
 }
@@ -338,22 +345,29 @@ static void pn_rx_complete(struct usb_ep *ep, struct usb_request *req)
 	case 0:
 		spin_lock_irqsave(&fp->rx.lock, flags);
 		skb = fp->rx.skb;
-		if (!skb)
+		if (!skb) {
 			skb = fp->rx.skb = netdev_alloc_skb(dev, 12);
-		if (req->actual < req->length) /* Last fragment */
-			fp->rx.skb = NULL;
+			if (likely(skb)) {
+				/* Can't use pskb_pull() on page in IRQ */
+				memcpy(skb_put(skb, 1), page_address(page), 1);
+				skb_add_rx_frag(skb, skb_shinfo(skb)->nr_frags,
+						page, 1, req->actual);
+				page = NULL;
+			}
+		} else {
+			skb_add_rx_frag(skb, skb_shinfo(skb)->nr_frags,
+					page, 0, req->actual);
+			page = NULL;
+		}
+		if (req->actual < PAGE_SIZE)
+			fp->rx.skb = NULL; /* Last fragment */
+		else
+			skb = NULL;
 		spin_unlock_irqrestore(&fp->rx.lock, flags);
-
-		if (unlikely(!skb))
-			break;
-		skb_add_rx_frag(skb, skb_shinfo(skb)->nr_frags, page, 0,
-				req->actual);
-		page = NULL;
-
-		if (req->actual < req->length) { /* Last fragment */
+		if (skb) {
 			skb->protocol = htons(ETH_P_PHONET);
 			skb_reset_mac_header(skb);
-			pskb_pull(skb, 1);
+			__skb_pull(skb, 1);
 			skb->dev = dev;
 			dev->stats.rx_packets++;
 			dev->stats.rx_bytes += skb->len;
@@ -508,13 +522,24 @@ int pn_bind(struct usb_configuration *c, struct usb_function *f)
 
 	/* Reserve endpoints */
 	status = -ENODEV;
+
+#ifdef  CONFIG_USB_ANDRPID_SHARE_ENDPOINT
+	ep = usb_ep_fixedconfig_alloc(gadget, &pn_fs_sink_desc);
+#else
 	ep = usb_ep_autoconfig(gadget, &pn_fs_sink_desc);
+#endif
+
 	if (!ep)
 		goto err;
 	fp->out_ep = ep;
 	ep->driver_data = fp; /* Claim */
 
+#ifdef  CONFIG_USB_ANDRPID_SHARE_ENDPOINT
+	ep = usb_ep_fixedconfig_alloc(gadget, &pn_fs_source_desc);
+#else
 	ep = usb_ep_autoconfig(gadget, &pn_fs_source_desc);
+#endif
+
 	if (!ep)
 		goto err;
 	fp->in_ep = ep;
@@ -577,6 +602,84 @@ pn_unbind(struct usb_configuration *c, struct usb_function *f)
 	kfree(fp);
 }
 
+#ifdef CONFIG_USB_ANDROID_SAMSUNG_COMPOSITE
+static int phonet_set_interface_id(struct usb_function *f,
+	int intf_num,
+	int index_num)
+{
+	int ret = 0;
+
+	if (gadget_is_dualspeed(f->config->cdev->gadget)) {
+		DBG_MSG(" ,high speed,-- intf_num=%d\n",intf_num);
+		if (index_num == 0) {
+			usb_change_interface_num(hs_pn_function,
+				f->hs_descriptors, &pn_control_intf_desc,
+				intf_num);
+		
+			usb_change_cdc_union_num(hs_pn_function,
+				f->hs_descriptors, &pn_union_desc,
+				intf_num, 1);
+			
+			//DBG_MSG(" ,high speed,-- pn_control_intf_desc.bInterfaceNumber=%d\n",pn_control_intf_desc.bInterfaceNumber);
+			//DBG_MSG(" ,high speed,-- pn_union_desc.bMasterInterface0=%d\n",pn_union_desc.bMasterInterface0);
+			ret = 1;
+		} else if (index_num == 1) {
+
+			usb_change_interface_num(hs_pn_function,
+				f->hs_descriptors, &pn_data_nop_intf_desc,
+				intf_num);
+			usb_change_interface_num(hs_pn_function,
+				f->hs_descriptors, &pn_data_intf_desc,
+				intf_num);
+			usb_change_cdc_union_num(hs_pn_function,
+				f->hs_descriptors, &pn_union_desc,
+				intf_num, 0);
+			
+			//DBG_MSG(" ,high speed,-- pn_data_nop_intf_desc.bInterfaceNumber=%d\n",pn_data_nop_intf_desc.bInterfaceNumber);
+			//DBG_MSG(" ,high speed,-- pn_data_intf_desc.bInterfaceNumber=%d\n",pn_data_intf_desc.bInterfaceNumber);
+			//DBG_MSG(" ,high speed,-- pn_union_desc.bSlaveInterface0=%d\n",pn_union_desc.bSlaveInterface0);
+			ret = 1;
+		} else {
+			printk(KERN_DEBUG "usb phonetis has only 2 interface. please check it\n");
+		}
+	} else {
+		DBG_MSG(" , intf_num=%d\n",intf_num);
+		if (index_num == 0) {
+			usb_change_interface_num(hs_pn_function,
+				f->hs_descriptors, &pn_control_intf_desc,
+				intf_num);
+		
+			usb_change_cdc_union_num(hs_pn_function,
+				f->hs_descriptors, &pn_union_desc,
+				intf_num, 1);
+			
+			//DBG_MSG(" ,high speed,-- pn_control_intf_desc.bInterfaceNumber=%d\n",pn_control_intf_desc.bInterfaceNumber);
+			//DBG_MSG(" ,high speed,-- pn_union_desc.bMasterInterface0=%d\n",pn_union_desc.bMasterInterface0);
+			ret = 1;
+		} else if (index_num == 1) {
+			usb_change_interface_num(hs_pn_function,
+				f->hs_descriptors, &pn_data_nop_intf_desc,
+				intf_num);
+			usb_change_interface_num(hs_pn_function,
+				f->hs_descriptors, &pn_data_intf_desc,
+				intf_num);
+			usb_change_cdc_union_num(hs_pn_function,
+				f->hs_descriptors, &pn_union_desc,
+				intf_num, 0);
+			
+			//DBG_MSG(" ,high speed,-- pn_data_nop_intf_desc.bInterfaceNumber=%d\n",pn_data_nop_intf_desc.bInterfaceNumber);
+			//DBG_MSG(" ,high speed,-- pn_data_intf_desc.bInterfaceNumber=%d\n",pn_data_intf_desc.bInterfaceNumber);
+			//DBG_MSG(" ,high speed,-- pn_union_desc.bSlaveInterface0=%d\n",pn_union_desc.bSlaveInterface0);
+			ret = 1;
+		} else {
+			printk(KERN_DEBUG "usb phonetis has only 2 interface. please check it\n");
+		}
+
+	}
+	return ret;
+}
+#endif
+
 /*-------------------------------------------------------------------------*/
 
 static struct net_device *dev;
@@ -598,6 +701,12 @@ int __init phonet_bind_config(struct usb_configuration *c)
 	fp->function.set_alt = pn_set_alt;
 	fp->function.get_alt = pn_get_alt;
 	fp->function.disable = pn_disconnect;
+
+#ifdef CONFIG_USB_ANDROID_SAMSUNG_COMPOSITE
+	fp->function.set_intf_num = phonet_set_interface_id;
+#endif
+
+	
 	spin_lock_init(&fp->rx.lock);
 
 	err = usb_add_function(c, &fp->function);
@@ -632,3 +741,26 @@ void gphonet_cleanup(void)
 {
 	unregister_netdev(dev);
 }
+
+#ifdef CONFIG_USB_ANDROID_PHONET
+int phonet_function_bind_config(struct usb_configuration *c)
+{
+	int ret = gphonet_setup(c->cdev->gadget);
+	if (ret == 0)
+		phonet_bind_config(c);
+	return ret;
+}
+
+
+static struct android_usb_function phonet_function = {
+	.name = "phonet",
+	.bind_config = phonet_function_bind_config,
+};
+
+static int __init init(void)
+{
+	android_register_function(&phonet_function);
+	return 0;
+}
+module_init(init);
+#endif /* CONFIG_USB_ANDROID_PHONET */

@@ -26,6 +26,11 @@
 #include <linux/device.h>
 #include <linux/etherdevice.h>
 
+#ifdef CONFIG_USB_ANDROID_ECM
+#include <linux/usb/android_composite.h>
+#include <linux/platform_device.h>
+#endif
+
 #include "u_ether.h"
 
 
@@ -112,6 +117,19 @@ static inline unsigned ecm_bitrate(struct usb_gadget *g)
 
 
 /* interface descriptor: */
+
+static struct usb_interface_assoc_descriptor
+ecm_iad_descriptor = {
+	.bLength =		sizeof ecm_iad_descriptor,
+	.bDescriptorType =	USB_DT_INTERFACE_ASSOCIATION,
+
+	/* .bFirstInterface =	DYNAMIC, */
+	.bInterfaceCount =	2,	/* control + data */
+	.bFunctionClass =	USB_CLASS_COMM,
+	.bFunctionSubClass =	USB_CDC_SUBCLASS_ETHERNET,
+	.bFunctionProtocol =	USB_CDC_PROTO_NONE,
+	/* .iFunction =		DYNAMIC */
+};
 
 static struct usb_interface_descriptor ecm_control_intf = {
 	.bLength =		sizeof ecm_control_intf,
@@ -215,6 +233,7 @@ static struct usb_endpoint_descriptor fs_ecm_out_desc = {
 
 static struct usb_descriptor_header *ecm_fs_function[] = {
 	/* CDC ECM control descriptors */
+	(struct usb_descriptor_header *) &ecm_iad_descriptor,
 	(struct usb_descriptor_header *) &ecm_control_intf,
 	(struct usb_descriptor_header *) &ecm_header_desc,
 	(struct usb_descriptor_header *) &ecm_union_desc,
@@ -260,6 +279,7 @@ static struct usb_endpoint_descriptor hs_ecm_out_desc = {
 
 static struct usb_descriptor_header *ecm_hs_function[] = {
 	/* CDC ECM control descriptors */
+	(struct usb_descriptor_header *) &ecm_iad_descriptor,
 	(struct usb_descriptor_header *) &ecm_control_intf,
 	(struct usb_descriptor_header *) &ecm_header_desc,
 	(struct usb_descriptor_header *) &ecm_union_desc,
@@ -280,6 +300,7 @@ static struct usb_string ecm_string_defs[] = {
 	[0].s = "CDC Ethernet Control Model (ECM)",
 	[1].s = NULL /* DYNAMIC */,
 	[2].s = "CDC Ethernet Data",
+	[3].s = "CDC ECM",
 	{  } /* end of list */
 };
 
@@ -292,6 +313,10 @@ static struct usb_gadget_strings *ecm_strings[] = {
 	&ecm_string_table,
 	NULL,
 };
+
+#ifdef CONFIG_USB_ANDROID_ECM
+static struct usb_ether_platform_data *ecm_pdata;
+#endif
 
 /*-------------------------------------------------------------------------*/
 
@@ -466,10 +491,10 @@ static int ecm_set_alt(struct usb_function *f, unsigned intf, unsigned alt)
 			usb_ep_disable(ecm->notify);
 		} else {
 			VDBG(cdev, "init ecm ctrl %d\n", intf);
-			ecm->notify_desc = ep_choose(cdev->gadget,
-					ecm->hs.notify,
-					ecm->fs.notify);
 		}
+		ecm->notify_desc = ep_choose(cdev->gadget,
+				ecm->hs.notify,
+				ecm->fs.notify);
 		usb_ep_enable(ecm->notify, ecm->notify_desc);
 		ecm->notify->driver_data = ecm;
 
@@ -485,11 +510,11 @@ static int ecm_set_alt(struct usb_function *f, unsigned intf, unsigned alt)
 
 		if (!ecm->port.in) {
 			DBG(cdev, "init ecm\n");
-			ecm->port.in = ep_choose(cdev->gadget,
-					ecm->hs.in, ecm->fs.in);
-			ecm->port.out = ep_choose(cdev->gadget,
-					ecm->hs.out, ecm->fs.out);
 		}
+		ecm->port.in = ep_choose(cdev->gadget,
+				ecm->hs.in, ecm->fs.in);
+		ecm->port.out = ep_choose(cdev->gadget,
+				ecm->hs.out, ecm->fs.out);
 
 		/* CDC Ethernet only sends data in non-default altsettings.
 		 * Changing altsettings resets filters, statistics, etc.
@@ -610,6 +635,7 @@ ecm_bind(struct usb_configuration *c, struct usb_function *f)
 	if (status < 0)
 		goto fail;
 	ecm->ctrl_id = status;
+	ecm_iad_descriptor.bFirstInterface = status;
 
 	ecm_control_intf.bInterfaceNumber = status;
 	ecm_union_desc.bMasterInterface0 = status;
@@ -795,6 +821,13 @@ ecm_bind_config(struct usb_configuration *c, u8 ethaddr[ETH_ALEN])
 			return status;
 		ecm_string_defs[1].id = status;
 		ecm_desc.iMACAddress = status;
+
+		/* IAD label */
+		status = usb_string_id(c->cdev);
+		if (status < 0)
+			return status;
+		ecm_string_defs[3].id = status;
+		ecm_iad_descriptor.iFunction = status;
 	}
 
 	/* allocate and initialize one new instance */
@@ -828,3 +861,138 @@ ecm_bind_config(struct usb_configuration *c, u8 ethaddr[ETH_ALEN])
 	}
 	return status;
 }
+
+#ifdef CONFIG_USB_ANDROID_ECM
+static int __init ecm_probe(struct platform_device *pdev)
+{
+	printk(KERN_INFO "ecm_probe\n");
+	ecm_pdata = pdev->dev.platform_data;
+	return 0;
+}
+
+static struct platform_driver ecm_platform_driver = {
+	.driver = { .name = "cdc_ethernet", },
+};
+
+int ecm_function_bind_config(struct usb_configuration *c)
+{
+	int ret;
+
+	if (!ecm_pdata) {
+		printk(KERN_ERR "ecm_pdata null in ecm_function_bind_config\n");
+		return -1;
+	}
+
+	printk(KERN_INFO
+		"ecm_function_bind_config MAC: %02X:%02X:%02X:%02X:%02X:%02X\n",
+		ecm_pdata->ethaddr[0], ecm_pdata->ethaddr[1],
+		ecm_pdata->ethaddr[2], ecm_pdata->ethaddr[3],
+		ecm_pdata->ethaddr[4], ecm_pdata->ethaddr[5]);
+
+	ret = gether_setup(c->cdev->gadget, ecm_pdata->ethaddr);
+	if (ret == 0)
+		ret = ecm_bind_config(c, ecm_pdata->ethaddr);
+	return ret;
+}
+
+static int ecm_function_rebind_config(struct usb_configuration *c,
+				struct usb_function *f)
+{
+
+	struct usb_composite_dev *cdev = c->cdev;
+	struct f_ecm		*ecm = func_to_ecm(f);
+	int status1, status2 = 0;
+	struct usb_descriptor_header **desc = f->descriptors;
+
+	/* re-allocate instance-specific interface IDs */
+	status1 = usb_interface_id(c, f);
+	if (status1 < 0)
+		goto fail;
+	ecm->ctrl_id = status1;
+
+	ecm_iad_descriptor.bFirstInterface = status1;
+	ecm_control_intf.bInterfaceNumber = status1;
+	ecm_union_desc.bMasterInterface0 = status1;
+
+	((struct usb_interface_assoc_descriptor *)desc[0])
+		->bFirstInterface = status1;
+	((struct usb_interface_descriptor *)desc[1])
+		->bInterfaceNumber = status1;
+	((struct usb_cdc_union_desc *)desc[3])
+		->bMasterInterface0 = status1;
+
+	status2 = usb_interface_id(c, f);
+	if (status2 < 0)
+		goto fail;
+	ecm->data_id = status2;
+
+	ecm_data_nop_intf.bInterfaceNumber = status2;
+	ecm_data_intf.bInterfaceNumber = status2;
+	ecm_union_desc.bSlaveInterface0 = status2;
+
+	((struct usb_interface_descriptor *)desc[6])
+		->bInterfaceNumber = status2;
+	((struct usb_interface_descriptor *)desc[7])
+		->bInterfaceNumber = status2;
+	((struct usb_cdc_union_desc *)desc[3])
+		->bSlaveInterface0 = status2;
+
+	if (gadget_is_dualspeed(c->cdev->gadget)) {
+		desc = f->hs_descriptors;
+		((struct usb_interface_assoc_descriptor *)desc[0])
+			->bFirstInterface = status1;
+		((struct usb_interface_descriptor *)desc[1])
+			->bInterfaceNumber = status1;
+		((struct usb_cdc_union_desc *)desc[3])
+			->bMasterInterface0 = status1;
+
+		((struct usb_interface_descriptor *)desc[6])
+			->bInterfaceNumber = status2;
+		((struct usb_interface_descriptor *)desc[7])
+			->bInterfaceNumber = status2;
+		((struct usb_cdc_union_desc *)desc[3])
+			->bSlaveInterface0 = status2;
+	}
+
+	return 0;
+
+fail:
+	if (f->descriptors)
+		usb_free_descriptors(f->descriptors);
+
+	if (ecm->notify_req) {
+		kfree(ecm->notify_req->buf);
+		usb_ep_free_request(ecm->notify, ecm->notify_req);
+	}
+
+	/* we might as well release our claims on endpoints */
+	if (ecm->notify)
+		ecm->notify->driver_data = NULL;
+	if (ecm->port.out)
+		ecm->port.out_ep->driver_data = NULL;
+	if (ecm->port.in)
+		ecm->port.in_ep->driver_data = NULL;
+
+	ERROR(cdev, "%s: can't re-bind, err %d %d\n",
+		f->name, status1, status2);
+
+	if (status2 < 0)
+		status1 = status2;
+	return status1;
+}
+
+static struct android_usb_function ecm_function = {
+	.name = "cdc_ethernet",
+	.bind_config = ecm_function_bind_config,
+	.rebind_config = ecm_function_rebind_config,
+};
+
+static int __init init(void)
+{
+	printk(KERN_INFO "f_ecm init\n");
+	platform_driver_probe(&ecm_platform_driver, ecm_probe);
+	android_register_function(&ecm_function);
+	return 0;
+}
+module_init(init);
+#endif /* CONFIG_USB_ANDROID_ECM */

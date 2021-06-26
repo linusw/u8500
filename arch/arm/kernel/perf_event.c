@@ -347,9 +347,18 @@ validate_group(struct perf_event *event)
 	return 0;
 }
 
+static irqreturn_t armpmu_platform_irq(int irq, void *dev)
+{
+	struct arm_pmu_platdata *plat = dev_get_platdata(&pmu_device->dev);
+
+	return plat->handle_irq(irq, dev, armpmu->handle_irq);
+}
+
 static int
 armpmu_reserve_hardware(void)
 {
+	struct arm_pmu_platdata *plat;
+	irq_handler_t handle_irq;
 	int i, err = -ENODEV, irq;
 
 	pmu_device = reserve_pmu(ARM_PMU_DEVICE_CPU);
@@ -359,6 +368,12 @@ armpmu_reserve_hardware(void)
 	}
 
 	init_pmu(ARM_PMU_DEVICE_CPU);
+
+	plat = dev_get_platdata(&pmu_device->dev);
+	if (plat && plat->handle_irq)
+		handle_irq = armpmu_platform_irq;
+	else
+		handle_irq = armpmu->handle_irq;
 
 	if (pmu_device->num_resources < 1) {
 		pr_err("no irqs for PMUs defined\n");
@@ -370,7 +385,7 @@ armpmu_reserve_hardware(void)
 		if (irq < 0)
 			continue;
 
-		err = request_irq(irq, armpmu->handle_irq,
+		err = request_irq(irq, handle_irq,
 				  IRQF_DISABLED | IRQF_NOBALANCING,
 				  "armpmu", NULL);
 		if (err) {
@@ -3045,7 +3060,7 @@ user_backtrace(struct frame_tail *tail,
 	 * Frame pointers should strictly progress back up the stack
 	 * (towards higher addresses).
 	 */
-	if (tail >= buftail.fp)
+	if (tail + 1 >= buftail.fp)
 		return NULL;
 
 	return buftail.fp - 1;

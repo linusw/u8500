@@ -68,7 +68,7 @@ static int __init init_cdb89712_flash (void)
 			flash_mtd->erasesize = 0x10000;
 	}
 	if (!flash_mtd) {
-		printk("FLASH probe failed\n");
+		printk(KERN_INFO "FLASH probe failed\n");
 		err = -ENXIO;
 		goto out_ioremap;
 	}
@@ -76,7 +76,7 @@ static int __init init_cdb89712_flash (void)
 	flash_mtd->owner = THIS_MODULE;
 
 	if (add_mtd_device(flash_mtd)) {
-		printk("FLASH device addition failed\n");
+		printk(KERN_INFO "FLASH device addition failed\n");
 		err = -ENOMEM;
 		goto out_probe;
 	}
@@ -133,7 +133,7 @@ static int __init init_cdb89712_sram (void)
 	simple_map_init(&cdb89712_sram_map);
 	sram_mtd = do_map_probe("map_ram", &cdb89712_sram_map);
 	if (!sram_mtd) {
-		printk("SRAM probe failed\n");
+		printk(KERN_INFO "SRAM probe failed\n");
 		err = -ENXIO;
 		goto out_ioremap;
 	}
@@ -142,7 +142,7 @@ static int __init init_cdb89712_sram (void)
 	sram_mtd->erasesize = 16;
 
 	if (add_mtd_device(sram_mtd)) {
-		printk("SRAM device addition failed\n");
+		printk(KERN_INFO "SRAM device addition failed\n");
 		err = -ENOMEM;
 		goto out_probe;
 	}
@@ -201,7 +201,7 @@ static int __init init_cdb89712_bootrom (void)
 	simple_map_init(&cdb89712_bootrom_map);
 	bootrom_mtd = do_map_probe("map_rom", &cdb89712_bootrom_map);
 	if (!bootrom_mtd) {
-		printk("BootROM probe failed\n");
+		printk(KERN_INFO "BootROM probe failed\n");
 		err = -ENXIO;
 		goto out_ioremap;
 	}
@@ -210,7 +210,7 @@ static int __init init_cdb89712_bootrom (void)
 	bootrom_mtd->erasesize = 0x10000;
 
 	if (add_mtd_device(bootrom_mtd)) {
-		printk("BootROM device addition failed\n");
+		printk(KERN_INFO "BootROM device addition failed\n");
 		err = -ENOMEM;
 		goto out_probe;
 	}

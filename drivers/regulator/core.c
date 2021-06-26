@@ -60,10 +60,12 @@ struct regulator {
 	char *supply_name;
 	struct device_attribute dev_attr;
 	struct regulator_dev *rdev;
+	int use;
 };
 
 static int _regulator_is_enabled(struct regulator_dev *rdev);
-static int _regulator_disable(struct regulator_dev *rdev);
+static int _regulator_disable(struct regulator_dev *rdev,
+		struct regulator_dev **supply_rdev_ptr);
 static int _regulator_get_voltage(struct regulator_dev *rdev);
 static int _regulator_get_current_limit(struct regulator_dev *rdev);
 static unsigned int _regulator_get_mode(struct regulator_dev *rdev);
@@ -517,6 +519,32 @@ static ssize_t regulator_suspend_standby_state_show(struct device *dev,
 static DEVICE_ATTR(suspend_standby_state, 0444,
 		regulator_suspend_standby_state_show, NULL);
 
+static ssize_t regulator_use_show(struct device *dev,
+				   struct device_attribute *attr, char *buf)
+{
+	struct regulator_dev *rdev = dev_get_drvdata(dev);
+	struct regulator *reg;
+	size_t size = 0;
+
+	if (rdev->use_count == 0)
+		return sprintf(buf, "no users\n");
+
+	list_for_each_entry(reg, &rdev->consumer_list, list) {
+		if (!reg->use)
+			continue;
+
+		if (reg->dev != NULL)
+			size += sprintf((buf + size), "%s (%d) ",
+					dev_name(reg->dev), reg->use);
+		else
+			size += sprintf((buf + size), "unknown (%d) ",
+					reg->use);
+	}
+	size += sprintf((buf + size), "\n");
+
+	return size;
+}
+static DEVICE_ATTR(use, 0444, regulator_use_show, NULL);
 
 /*
  * These are the only attributes are present for all regulators.
@@ -568,8 +596,11 @@ static void drms_uA_update(struct regulator_dev *rdev)
 		return;
 
 	/* calc total requested load */
-	list_for_each_entry(sibling, &rdev->consumer_list, list)
-		current_uA += sibling->uA_load;
+	list_for_each_entry(sibling, &rdev->consumer_list, list){
+		if ( sibling->use > 0 ){
+			current_uA += sibling->uA_load;
+		}
+	}
 
 	/* now get the optimum mode for our new total regulator load */
 	mode = rdev->desc->ops->get_optimum_mode(rdev, input_uV,
@@ -1262,13 +1293,17 @@ static int _regulator_enable(struct regulator_dev *rdev)
 {
 	int ret, delay;
 
-	/* do we need to enable the supply regulator first */
-	if (rdev->supply) {
-		ret = _regulator_enable(rdev->supply);
-		if (ret < 0) {
-			printk(KERN_ERR "%s: failed to enable %s: %d\n",
-			       __func__, rdev_get_name(rdev), ret);
-			return ret;
+	if (rdev->use_count == 0) {
+		/* do we need to enable the supply regulator first */
+		if (rdev->supply) {
+			mutex_lock(&rdev->supply->mutex);
+			ret = _regulator_enable(rdev->supply);
+			mutex_unlock(&rdev->supply->mutex);
+			if (ret < 0) {
+				printk(KERN_ERR "%s: failed to enable %s: %d\n",
+				       __func__, rdev_get_name(rdev), ret);
+				return ret;
+			}
 		}
 	}
 
@@ -1344,14 +1379,19 @@ int regulator_enable(struct regulator *regulator)
 	mutex_lock(&rdev->mutex);
 	ret = _regulator_enable(rdev);
 	mutex_unlock(&rdev->mutex);
+	if (ret == 0)
+		regulator->use++;
+
 	return ret;
 }
 EXPORT_SYMBOL_GPL(regulator_enable);
 
 /* locks held by regulator_disable() */
-static int _regulator_disable(struct regulator_dev *rdev)
+static int _regulator_disable(struct regulator_dev *rdev,
+		struct regulator_dev **supply_rdev_ptr)
 {
 	int ret = 0;
+	*supply_rdev_ptr = NULL;
 
 	if (WARN(rdev->use_count <= 0,
 			"unbalanced disables for %s\n",
@@ -1377,8 +1417,7 @@ static int _regulator_disable(struct regulator_dev *rdev)
 		}
 
 		/* decrease our supplies ref count and disable if required */
-		if (rdev->supply)
-			_regulator_disable(rdev->supply);
+		*supply_rdev_ptr = rdev->supply;
 
 		rdev->use_count = 0;
 	} else if (rdev->use_count > 1) {
@@ -1408,17 +1447,32 @@ static int _regulator_disable(struct regulator_dev *rdev)
 int regulator_disable(struct regulator *regulator)
 {
 	struct regulator_dev *rdev = regulator->rdev;
+	struct regulator_dev *supply_rdev = NULL;
 	int ret = 0;
 
 	mutex_lock(&rdev->mutex);
-	ret = _regulator_disable(rdev);
+	ret = _regulator_disable(rdev, &supply_rdev);
 	mutex_unlock(&rdev->mutex);
+
+	/* decrease our supplies ref count and disable if required */
+	while (supply_rdev != NULL) {
+		rdev = supply_rdev;
+
+		mutex_lock(&rdev->mutex);
+		_regulator_disable(rdev, &supply_rdev);
+		mutex_unlock(&rdev->mutex);
+	}
+
+	if (ret == 0)
+		regulator->use--;
+
 	return ret;
 }
 EXPORT_SYMBOL_GPL(regulator_disable);
 
 /* locks held by regulator_force_disable() */
-static int _regulator_force_disable(struct regulator_dev *rdev)
+static int _regulator_force_disable(struct regulator_dev *rdev,
+		struct regulator_dev **supply_rdev_ptr)
 {
 	int ret = 0;
 
@@ -1437,8 +1491,7 @@ static int _regulator_force_disable(struct regulator_dev *rdev)
 	}
 
 	/* decrease our supplies ref count and disable if required */
-	if (rdev->supply)
-		_regulator_disable(rdev->supply);
+	*supply_rdev_ptr = rdev->supply;
 
 	rdev->use_count = 0;
 	return ret;
@@ -1455,12 +1508,17 @@ static int _regulator_force_disable(struct regulator_dev *rdev)
  */
 int regulator_force_disable(struct regulator *regulator)
 {
+	struct regulator_dev *supply_rdev = NULL;
 	int ret;
 
 	mutex_lock(&regulator->rdev->mutex);
 	regulator->uA_load = 0;
-	ret = _regulator_force_disable(regulator->rdev);
+	ret = _regulator_force_disable(regulator->rdev, &supply_rdev);
 	mutex_unlock(&regulator->rdev->mutex);
+
+	if (supply_rdev)
+		regulator_disable(get_device_regulator(rdev_get_dev(supply_rdev)));
+
 	return ret;
 }
 EXPORT_SYMBOL_GPL(regulator_force_disable);
@@ -1848,7 +1906,7 @@ int regulator_set_optimum_mode(struct regulator *regulator, int uA_load)
 	ret = -EINVAL;
 
 	/* sanity check */
-	if (!rdev->desc->ops->get_optimum_mode)
+	if (!rdev->desc->ops->get_optimum_mode && !rdev->desc->ops->get_voltage)
 		goto out;
 
 	/* get output voltage */
@@ -1871,8 +1929,11 @@ int regulator_set_optimum_mode(struct regulator *regulator, int uA_load)
 	}
 
 	/* calc total requested load for this regulator */
-	list_for_each_entry(consumer, &rdev->consumer_list, list)
-		total_uA_load += consumer->uA_load;
+	list_for_each_entry(consumer, &rdev->consumer_list, list){
+		if ( consumer->use > 0 ){
+			total_uA_load += consumer->uA_load;
+		}
+	}
 
 	mode = rdev->desc->ops->get_optimum_mode(rdev,
 						 input_uV, output_uV,
@@ -1941,7 +2002,13 @@ static void _notifier_call_chain(struct regulator_dev *rdev,
 
 	/* now notify regulator we supply */
 	list_for_each_entry(_rdev, &rdev->supply_list, slist) {
-		mutex_lock(&_rdev->mutex);
+		if (!mutex_trylock(&_rdev->mutex)) {
+			if (_rdev->notifier.head) {
+				printk(KERN_ERR "regulator_core : %s can't handle notifier_call_chain\n", _rdev->desc->name);
+				BUG();
+			}
+			continue;
+		}
 		_notifier_call_chain(_rdev, event, data);
 		mutex_unlock(&_rdev->mutex);
 	}
@@ -2136,6 +2203,10 @@ static int add_regulator_attributes(struct regulator_dev *rdev)
 	struct device		*dev = &rdev->dev;
 	struct regulator_ops	*ops = rdev->desc->ops;
 	int			status = 0;
+
+	status = device_create_file(dev, &dev_attr_use);
+	if (status < 0)
+		dev_warn(dev, "Create sysfs file \"use\" failed");
 
 	/* some attributes need specific methods to be displayed */
 	if (ops->get_voltage) {
@@ -2460,6 +2531,14 @@ void regulator_has_full_constraints(void)
 	has_full_constraints = 1;
 }
 EXPORT_SYMBOL_GPL(regulator_has_full_constraints);
+
+#ifdef CONFIG_SAMSUNG_PANIC_DISPLAY_DEVICES
+struct list_head *regulator_regulator_map_list(void)
+{
+	return &regulator_map_list;
+}
+EXPORT_SYMBOL_GPL(regulator_regulator_map_list);
+#endif
 
 /**
  * rdev_get_drvdata - get rdev regulator driver data

@@ -162,7 +162,7 @@ static void autofs4_notify_daemon(struct autofs_sb_info *sbi,
 		break;
 	}
 	default:
-		printk("autofs4_notify_daemon: bad type %d!\n", type);
+		printk(KERN_INFO "autofs4_notify_daemon: bad type %d!\n", type);
 		return;
 	}
 

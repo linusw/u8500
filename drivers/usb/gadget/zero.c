@@ -292,7 +292,10 @@ static int __init zero_bind(struct usb_composite_dev *cdev)
 	device_desc.iSerialNumber = id;
 
 	setup_timer(&autoresume_timer, zero_autoresume, (unsigned long) cdev);
-
+#ifdef CONFIG_USB_OTG_20
+		if (gadget_is_otg2(cdev->gadget))
+			otg_descriptor.bcdOTG = __constant_cpu_to_le16(0x0200);
+#endif
 	/* Register primary, then secondary configuration.  Note that
 	 * SH3 only allows one config...
 	 */

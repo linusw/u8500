@@ -3435,7 +3435,7 @@ static int cas_check_invariants(struct cas *cp)
 			__free_pages(page, CAS_JUMBO_PAGE_SHIFT - PAGE_SHIFT);
 			cp->page_order = CAS_JUMBO_PAGE_SHIFT - PAGE_SHIFT;
 		} else {
-			printk("MTU limited to %d bytes\n", CAS_MAX_MTU);
+			printk(KERN_INFO "MTU limited to %d bytes\n", CAS_MAX_MTU);
 		}
 	}
 #endif

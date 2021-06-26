@@ -34,8 +34,8 @@ struct snd_usb_audio {
 	int index;
 	struct usb_device *dev;
 	struct snd_card *card;
+	struct usb_interface *pm_intf;
 	u32 usb_id;
-	int shutdown;
 	unsigned int txfr_quirk:1; /* Subframe boundaries on transfers */
 	int num_interfaces;
 	int num_suspended_intf;
@@ -52,6 +52,9 @@ struct snd_usb_audio {
 	int async_unlink;		/* from the 'async_unlink' module param */
 
 	struct usb_host_interface *ctrl_intf;	/* the audio control interface */
+	unsigned int shutdown:1;
+	unsigned int probing:1;
+	unsigned int autosuspended:1;
 };
 
 /*

@@ -99,6 +99,7 @@ enum {
 #define HCISETLINKMODE	_IOW('H', 226, int)
 #define HCISETACLMTU	_IOW('H', 227, int)
 #define HCISETSCOMTU	_IOW('H', 228, int)
+#define HCISETCONNINFO	_IOW('H', 229, int)
 
 #define HCIINQUIRY	_IOR('H', 240, int)
 
@@ -143,14 +144,19 @@ enum {
 #define ESCO_2EV5	0x0100
 #define ESCO_3EV5	0x0200
 
-#define SCO_ESCO_MASK  (ESCO_HV1 | ESCO_HV2 | ESCO_HV3)
-#define EDR_ESCO_MASK  (ESCO_2EV3 | ESCO_3EV3 | ESCO_2EV5 | ESCO_3EV5)
+#define SCO_ESCO_MASK	(ESCO_HV1 | ESCO_HV2 | ESCO_HV3)
+#define EDR_ESCO_MASK	(ESCO_2EV3 | ESCO_3EV3 | ESCO_2EV5 | ESCO_3EV5)
+#define ALL_ESCO_MASK	(SCO_ESCO_MASK | ESCO_EV3 | ESCO_EV4 | ESCO_EV5 | \
+			EDR_ESCO_MASK)
 
 /* ACL flags */
+#define ACL_START_NO_FLUSH	0x00
 #define ACL_CONT		0x01
 #define ACL_START		0x02
 #define ACL_ACTIVE_BCAST	0x04
 #define ACL_PICO_BCAST		0x08
+
+#define ACL_PB_MASK	(ACL_CONT | ACL_START)
 
 /* Baseband links */
 #define SCO_LINK	0x00
@@ -190,6 +196,7 @@ enum {
 #define LMP_EDR_ESCO_3M	0x40
 #define LMP_EDR_3S_ESCO	0x80
 
+#define LMP_NO_FLUSH	0x01
 #define LMP_SIMPLE_PAIR	0x08
 
 /* Connection modes */
@@ -220,6 +227,15 @@ enum {
 #define HCI_AT_DEDICATED_BONDING_MITM	0x03
 #define HCI_AT_GENERAL_BONDING		0x04
 #define HCI_AT_GENERAL_BONDING_MITM	0x05
+
+/* Link Key types */
+#define HCI_LK_COMBINATION			0x00
+#define HCI_LK_LOCAL_UNIT			0x01
+#define HCI_LK_REMOTE_UNIT			0x02
+#define HCI_LK_DEBUG_COMBINATION		0x03
+#define HCI_LK_UNAUTHENTICATED_COMBINATION	0x04
+#define HCI_LK_AUTHENTICATED_COMBINATION	0x05
+#define HCI_LK_CHANGEED_COMBINATION_KEY		0x06
 
 /* -----  HCI Commands ---- */
 #define HCI_OP_INQUIRY			0x0401
@@ -995,6 +1011,9 @@ struct hci_conn_info {
 	__u8     out;
 	__u16    state;
 	__u32    link_mode;
+	__u32    mtu;
+	__u32    cnt;
+	__u32    pkts;
 };
 
 struct hci_dev_req {
@@ -1019,9 +1038,16 @@ struct hci_conn_info_req {
 	struct   hci_conn_info conn_info[0];
 };
 
+struct hci_set_conn_info_req {
+	bdaddr_t bdaddr;
+	__u8     pin_len;
+	__u8	 key_type;
+};
+
 struct hci_auth_info_req {
 	bdaddr_t bdaddr;
 	__u8     type;
+	__u8     level;
 };
 
 struct hci_inquiry_req {

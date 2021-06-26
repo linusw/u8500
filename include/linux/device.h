@@ -110,10 +110,12 @@ extern int bus_unregister_notifier(struct bus_type *bus,
  */
 #define BUS_NOTIFY_ADD_DEVICE		0x00000001 /* device added */
 #define BUS_NOTIFY_DEL_DEVICE		0x00000002 /* device removed */
-#define BUS_NOTIFY_BOUND_DRIVER		0x00000003 /* driver bound to device */
-#define BUS_NOTIFY_UNBIND_DRIVER	0x00000004 /* driver about to be
+#define BUS_NOTIFY_BIND_DRIVER		0x00000003 /* driver about to be
+						      bound */
+#define BUS_NOTIFY_BOUND_DRIVER		0x00000004 /* driver bound to device */
+#define BUS_NOTIFY_UNBIND_DRIVER	0x00000005 /* driver about to be
 						      unbound */
-#define BUS_NOTIFY_UNBOUND_DRIVER	0x00000005 /* driver is unbound
+#define BUS_NOTIFY_UNBOUND_DRIVER	0x00000006 /* driver is unbound
 						      from the device */
 
 extern struct kset *bus_get_kset(struct bus_type *bus);
@@ -421,6 +423,7 @@ struct device {
 	void		*platform_data;	/* Platform specific data, device
 					   core doesn't touch it */
 	struct dev_pm_info	power;
+	struct dev_power_domain	*pwr_domain;
 
 #ifdef CONFIG_NUMA
 	int		numa_node;	/* NUMA node this device is close to */
@@ -657,6 +660,13 @@ extern const char *dev_driver_string(const struct device *dev);
 #define dev_info(dev, format, arg...)		\
 	dev_printk(KERN_INFO , dev , format , ## arg)
 
+
+#if (defined(CONFIG_SAMSUNG_LOG_BUF) || defined(DEBUG))
+#define dev_samsung_dbg(dev, format, arg...)		\
+	dev_printk(KERN_DEBUG , dev , format , ## arg)
+#endif
+
+
 #if defined(DEBUG)
 #define dev_dbg(dev, format, arg...)		\
 	dev_printk(KERN_DEBUG , dev , format , ## arg)
@@ -667,6 +677,7 @@ extern const char *dev_driver_string(const struct device *dev);
 #else
 #define dev_dbg(dev, format, arg...)		\
 	({ if (0) dev_printk(KERN_DEBUG, dev, format, ##arg); 0; })
+
 #endif
 
 #ifdef VERBOSE_DEBUG

@@ -156,8 +156,7 @@ struct rtc_task;
 /* flags */
 #define RTC_DEV_BUSY 0
 
-struct rtc_device
-{
+struct rtc_device {
 	struct device dev;
 	struct module *owner;
 
@@ -205,6 +204,10 @@ extern int rtc_read_alarm(struct rtc_device *rtc,
 			struct rtc_wkalrm *alrm);
 extern int rtc_set_alarm(struct rtc_device *rtc,
 				struct rtc_wkalrm *alrm);
+#if defined(CONFIG_MACH_JANICE_CHN) || defined(CONFIG_MACH_GAVINI_CHN)
+extern int rtc_set_alarm_boot(struct rtc_device *rtc,
+				struct rtc_wkalrm *alrm);
+#endif
 extern void rtc_update_irq(struct rtc_device *rtc,
 			unsigned long num, unsigned long events);
 
@@ -242,6 +245,11 @@ static inline bool is_leap_year(unsigned int year)
 extern int rtc_hctosys_ret;
 #else
 #define rtc_hctosys_ret -ENODEV
+#endif
+
+
+#if defined(CONFIG_MACH_JANICE_CHN) || defined(CONFIG_MACH_GAVINI_CHN)
+extern struct rtc_wkalrm autoboot_alm;
 #endif
 
 #endif /* __KERNEL__ */

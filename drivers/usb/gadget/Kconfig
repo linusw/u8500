@@ -836,6 +836,104 @@ config USB_G_PRINTER
 	  For more information, see Documentation/usb/gadget_printer.txt
 	  which includes sample code for accessing the device file.
 
+config USB_ANDROID
+	boolean "Android Gadget"
+	depends on SWITCH
+	help
+	  The Android gadget driver supports multiple USB functions.
+	  The functions can be configured via a board file and may be
+	  enabled and disabled dynamically.
+
+config USB_ANDROID_ACM
+	boolean "Android gadget ACM serial function"
+	depends on USB_ANDROID
+	help
+	  Provides ACM serial function for android gadget driver.
+
+config USB_DUN_SUPPORT
+	boolean "DUN support function"
+	depends on USB_ANDROID_ACM
+	help
+	  Provides USB modem serial driver.
+
+config USB_ANDROID_ADB
+	boolean "Android gadget adb function"
+	depends on USB_ANDROID
+	help
+	  Provides adb function for android gadget driver.
+
+config USB_ANDROID_MASS_STORAGE
+	boolean "Android gadget mass storage function"
+	depends on USB_ANDROID && SWITCH
+	help
+	  Provides USB mass storage function for android gadget driver.
+
+config USB_ANDROID_MTP
+	boolean "Android MTP function"
+	depends on USB_ANDROID
+	help
+	  Provides Media Transfer Protocol (MTP) support for android gadget driver.
+
+config USB_ANDROID_SAMSUNG_COMPOSITE
+	boolean "Samsung Composite function"
+	depends on USB_ANDROID
+	help
+	  Provides SAMSUNG composite driver using ACM, UMS, ADB, MTP, RNDIS
+
+config USB_ANDROID_SAMSUNG_ESCAPE
+	boolean "Use escape usb host driver in PC side."
+	depends on USB_ANDROID_SAMSUNG_COMPOSITE
+	help
+	  If you enable this option, the device will setting custom IAD for Escape driver.
+
+config USB_ANDROID_SAMSUNG_KIES_UMS
+	boolean "Use UMS composite in Samsung Kies mode"
+	depends on USB_ANDROID_SAMSUNG_ESCAPE
+	help
+	  If you enable this option, the ums will be used in Kies mode.
+
+config CONFIG_USB_ANDROID_SAMSUNG_RNDIS_WITH_MS_COMPOSITE
+	boolean "Use RNDIS with ms composite in PC side."
+	depends on USB_ANDROID_SAMSUNG_COMPOSITE
+	help
+	  If you enable this option, the device will setting custom IAD for to use ms composite.
+
+config USB_ANDROID_SAMSUNG_MTP
+	boolean "Samsung MTP function"
+	depends on USB_ANDROID
+	help
+	  Provides Media Transfer Protocol (MTP) support for samsung gadget driver.
+
+config USB_ANDROID_ETHER
+	boolean "Android gadget Ethernet function"
+	depends on USB_ANDROID
+	help
+	   Provides CDC Ethernat (ECM: Ethernet Control Model) or
+	   RNDIS (Remote NDIS) for android gadget driver.
+
+	   ECM: The drivers are not provided by Microsoft.
+
+	   RNDIS: The drivers are provided by Microsoft.
+
+config USB_ANDROID_PHONET
+	boolean "Android Phonet function"
+	depends on USB_ANDROID
+	help
+	  Provides Phonet Protocol support for android gadget driver.
+
+
+config USB_ANDROID_ACCESSORY
+	boolean "Android USB accessory function"
+	depends on USB_ANDROID
+	help
+	  Provides Android USB Accessory support for android gadget driver.
+
+config USB_ANDRPID_SHARE_ENDPOINT
+	boolean "USB share endpoint"
+	depends on USB_ANDROID
+	help
+	  Phonet need more endpoint, Share endpoint.
+
 config USB_CDC_COMPOSITE
 	tristate "CDC Composite Device (Ethernet and ACM)"
 	depends on NET
@@ -927,5 +1025,65 @@ config USB_G_WEBCAM
 	  dynamically linked module called "g_webcam".
 
 endchoice
+
+choice
+	prompt "Ether Mode"
+	depends on USB_ANDROID_ETHER
+
+config USB_ANDROID_ECM
+	boolean "Android gadget ECM ether function"
+	depends on USB_ANDROID
+	help
+	  Provides CDC Ethernet (ECM) ether for android gadget driver.
+
+	  ECM and RNDIS should be mutually exclusive as both classes are
+	  serving the same purpose.
+
+config USB_ANDROID_RNDIS
+	boolean "Android gadget RNDIS ethernet function"
+	depends on USB_ANDROID
+	help
+	  Microsoft Windows XP bundles the "Remote NDIS" (RNDIS) protocol,
+	  and Microsoft provides redistributable binary RNDIS drivers for
+	  older versions of Windows.
+
+	  If you say "y" here, the Ethernet gadget driver will try to provide
+	  a second device configuration, supporting RNDIS to talk to such
+	  Microsoft USB hosts.
+
+	  To make MS-Windows work with this, use Documentation/usb/linux.inf
+	  as the "driver info file".  For versions of MS-Windows older than
+	  XP, you'll need to download drivers from Microsoft's website; a URL
+	  is given in comments found in that info file.
+
+config USB_ANDROID_RNDIS_WCEIS
+	boolean "Use Windows Internet Sharing Class/SubClass/Protocol"
+	depends on USB_ANDROID_RNDIS
+	help
+	  Causes the driver to look like a Windows-compatible Internet
+	  Sharing device, so Windows auto-detects it.
+
+	  If you enable this option, the device is no longer CDC ethernet
+	  compatible.
+
+endchoice
+
+config USB_OTG_13
+	bool "OTG 1.3 USB SUPPORT"
+	select PM_RUNTIME
+	select USB_OTG_WHITELIST
+	select USB_SUSPEND
+	help
+	Enabling the whitelist (Target Peripheral List-TPL) and runtime power
+	management at system level and usb level for OTG 1.3.
+
+config USB_OTG_20
+	bool "OTG 2.0 USB SUPPORT"
+	select PM_RUNTIME
+	select USB_OTG_WHITELIST
+	select USB_SUSPEND
+	help
+	Enabling the whitelist (Target Peripheral List-TPL) and runtime power
+	management at system level and usb level for OTG 2.0.
 
 endif # USB_GADGET

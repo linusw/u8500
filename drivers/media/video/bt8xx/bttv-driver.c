@@ -939,7 +939,7 @@ void free_btres(struct bttv *btv, struct bttv_fh *fh, int bits)
 {
 	if ((fh->resources & bits) != bits) {
 		/* trying to free ressources not allocated by us ... */
-		printk("bttv: BUG! (btres)\n");
+		printk(KERN_INFO "bttv: BUG! (btres)\n");
 	}
 	mutex_lock(&btv->lock);
 	fh->resources  &= ~bits;
@@ -3667,12 +3667,12 @@ static int bttv_risc_decode(u32 risc)
 	};
 	int i;
 
-	printk("0x%08x [ %s", risc,
+	printk(KERN_INFO "0x%08x [ %s", risc,
 	       instr[risc >> 28] ? instr[risc >> 28] : "INVALID");
 	for (i = ARRAY_SIZE(bits)-1; i >= 0; i--)
 		if (risc & (1 << (i + 12)))
-			printk(" %s",bits[i]);
-	printk(" count=%d ]\n", risc & 0xfff);
+			printk(KERN_INFO " %s", bits[i]);
+	printk(KERN_INFO " count=%d ]\n", risc & 0xfff);
 	return incr[risc >> 28] ? incr[risc >> 28] : 1;
 }
 
@@ -3681,14 +3681,14 @@ static void bttv_risc_disasm(struct bttv *btv,
 {
 	unsigned int i,j,n;
 
-	printk("%s: risc disasm: %p [dma=0x%08lx]\n",
+	printk(KERN_INFO "%s: risc disasm: %p [dma=0x%08lx]\n",
 	       btv->c.v4l2_dev.name, risc->cpu, (unsigned long)risc->dma);
 	for (i = 0; i < (risc->size >> 2); i += n) {
-		printk("%s:   0x%lx: ", btv->c.v4l2_dev.name,
+		printk(KERN_INFO "%s:   0x%lx: ", btv->c.v4l2_dev.name,
 		       (unsigned long)(risc->dma + (i<<2)));
 		n = bttv_risc_decode(le32_to_cpu(risc->cpu[i]));
 		for (j = 1; j < n; j++)
-			printk("%s:   0x%lx: 0x%08x [ arg #%d ]\n",
+			printk(KERN_INFO "%s:   0x%lx: 0x%08x [ arg #%d ]\n",
 			       btv->c.v4l2_dev.name, (unsigned long)(risc->dma + ((i+j)<<2)),
 			       risc->cpu[i+j], j);
 		if (0 == risc->cpu[i])
@@ -3698,15 +3698,15 @@ static void bttv_risc_disasm(struct bttv *btv,
 
 static void bttv_print_riscaddr(struct bttv *btv)
 {
-	printk("  main: %08Lx\n",
+	printk(KERN_INFO "  main: %08Lx\n",
 	       (unsigned long long)btv->main.dma);
-	printk("  vbi : o=%08Lx e=%08Lx\n",
+	printk(KERN_INFO "  vbi : o=%08Lx e=%08Lx\n",
 	       btv->cvbi ? (unsigned long long)btv->cvbi->top.dma : 0,
 	       btv->cvbi ? (unsigned long long)btv->cvbi->bottom.dma : 0);
-	printk("  cap : o=%08Lx e=%08Lx\n",
+	printk(KERN_INFO "  cap : o=%08Lx e=%08Lx\n",
 	       btv->curr.top    ? (unsigned long long)btv->curr.top->top.dma : 0,
 	       btv->curr.bottom ? (unsigned long long)btv->curr.bottom->bottom.dma : 0);
-	printk("  scr : o=%08Lx e=%08Lx\n",
+	printk(KERN_INFO "  scr : o=%08Lx e=%08Lx\n",
 	       btv->screen ? (unsigned long long)btv->screen->top.dma : 0,
 	       btv->screen ? (unsigned long long)btv->screen->bottom.dma : 0);
 	bttv_risc_disasm(btv, &btv->main);
@@ -3741,18 +3741,18 @@ static void bttv_print_irqbits(u32 print, u32 mark)
 {
 	unsigned int i;
 
-	printk("bits:");
+	printk(KERN_INFO "bits:");
 	for (i = 0; i < ARRAY_SIZE(irq_name); i++) {
 		if (print & (1 << i))
-			printk(" %s",irq_name[i]);
+			printk(KERN_INFO " %s", irq_name[i]);
 		if (mark & (1 << i))
-			printk("*");
+			printk(KERN_INFO "*");
 	}
 }
 
 static void bttv_irq_debug_low_latency(struct bttv *btv, u32 rc)
 {
-	printk("bttv%d: irq: skipped frame [main=%lx,o_vbi=%lx,o_field=%lx,rc=%lx]\n",
+	printk(KERN_INFO "bttv%d: irq: skipped frame [main=%lx,o_vbi=%lx,o_field=%lx,rc=%lx]\n",
 	       btv->c.nr,
 	       (unsigned long)btv->main.dma,
 	       (unsigned long)le32_to_cpu(btv->main.cpu[RISC_SLOT_O_VBI+1]),
@@ -3760,14 +3760,14 @@ static void bttv_irq_debug_low_latency(struct bttv *btv, u32 rc)
 	       (unsigned long)rc);
 
 	if (0 == (btread(BT848_DSTATUS) & BT848_DSTATUS_HLOC)) {
-		printk("bttv%d: Oh, there (temporarely?) is no input signal. "
+		printk(KERN_INFO "bttv%d: Oh, there (temporarely?) is no input signal. "
 		       "Ok, then this is harmless, don't worry ;)\n",
 		       btv->c.nr);
 		return;
 	}
-	printk("bttv%d: Uhm. Looks like we have unusual high IRQ latencies.\n",
+	printk(KERN_INFO "bttv%d: Uhm. Looks like we have unusual high IRQ latencies.\n",
 	       btv->c.nr);
-	printk("bttv%d: Lets try to catch the culpit red-handed ...\n",
+	printk(KERN_INFO "bttv%d: Lets try to catch the culpit red-handed ...\n",
 	       btv->c.nr);
 	dump_stack();
 }
@@ -3866,7 +3866,7 @@ bttv_irq_wakeup_video(struct bttv *btv, struct bttv_buffer_set *wakeup,
 	if (wakeup->top == wakeup->bottom) {
 		if (NULL != wakeup->top && curr->top != wakeup->top) {
 			if (irq_debug > 1)
-				printk("bttv%d: wakeup: both=%p\n",btv->c.nr,wakeup->top);
+				printk(KERN_INFO "bttv%d: wakeup: both=%p\n", btv->c.nr, wakeup->top);
 			wakeup->top->vb.ts = ts;
 			wakeup->top->vb.field_count = btv->field_count;
 			wakeup->top->vb.state = state;
@@ -3875,7 +3875,7 @@ bttv_irq_wakeup_video(struct bttv *btv, struct bttv_buffer_set *wakeup,
 	} else {
 		if (NULL != wakeup->top && curr->top != wakeup->top) {
 			if (irq_debug > 1)
-				printk("bttv%d: wakeup: top=%p\n",btv->c.nr,wakeup->top);
+				printk(KERN_INFO "bttv%d: wakeup: top=%p\n", btv->c.nr, wakeup->top);
 			wakeup->top->vb.ts = ts;
 			wakeup->top->vb.field_count = btv->field_count;
 			wakeup->top->vb.state = state;
@@ -3883,7 +3883,7 @@ bttv_irq_wakeup_video(struct bttv *btv, struct bttv_buffer_set *wakeup,
 		}
 		if (NULL != wakeup->bottom && curr->bottom != wakeup->bottom) {
 			if (irq_debug > 1)
-				printk("bttv%d: wakeup: bottom=%p\n",btv->c.nr,wakeup->bottom);
+				printk(KERN_INFO "bttv%d: wakeup: bottom=%p\n", btv->c.nr, wakeup->bottom);
 			wakeup->bottom->vb.ts = ts;
 			wakeup->bottom->vb.field_count = btv->field_count;
 			wakeup->bottom->vb.state = state;
@@ -3921,7 +3921,7 @@ static void bttv_irq_timeout(unsigned long data)
 		       btv->c.nr, btv->framedrop, btv->irq_me, btv->irq_total,
 		       btread(BT848_RISC_COUNT));
 		bttv_print_irqbits(btread(BT848_INT_STAT),0);
-		printk("\n");
+		printk(KERN_INFO "\n");
 	}
 
 	spin_lock_irqsave(&btv->s_lock,flags);
@@ -4093,15 +4093,15 @@ static irqreturn_t bttv_irq(int irq, void *dev_id)
 			       stat>>28, btread(BT848_RISC_COUNT));
 			bttv_print_irqbits(stat,astat);
 			if (stat & BT848_INT_HLOCK)
-				printk("   HLOC => %s", (dstat & BT848_DSTATUS_HLOC)
+				printk(KERN_INFO "   HLOC => %s", (dstat & BT848_DSTATUS_HLOC)
 				       ? "yes" : "no");
 			if (stat & BT848_INT_VPRES)
-				printk("   PRES => %s", (dstat & BT848_DSTATUS_PRES)
+				printk(KERN_INFO "   PRES => %s", (dstat & BT848_DSTATUS_PRES)
 				       ? "yes" : "no");
 			if (stat & BT848_INT_FMTCHG)
-				printk("   NUML => %s", (dstat & BT848_DSTATUS_NUML)
+				printk(KERN_INFO "   NUML => %s", (dstat & BT848_DSTATUS_NUML)
 				       ? "625" : "525");
-			printk("\n");
+			printk(KERN_INFO "\n");
 		}
 
 		if (astat&BT848_INT_VSYNC)
@@ -4135,7 +4135,7 @@ static irqreturn_t bttv_irq(int irq, void *dev_id)
 			       (astat & BT848_INT_OCERR) ? "OCERR" : "",
 			       btread(BT848_RISC_COUNT));
 			bttv_print_irqbits(stat,astat);
-			printk("\n");
+			printk(KERN_INFO "\n");
 			if (bttv_debug)
 				bttv_print_riscaddr(btv);
 		}
@@ -4164,7 +4164,7 @@ static irqreturn_t bttv_irq(int irq, void *dev_id)
 
 			bttv_print_irqbits(stat,astat);
 
-			printk("]\n");
+			printk(KERN_INFO "]\n");
 		}
 	}
 	btv->irq_total++;
@@ -4226,7 +4226,7 @@ static void bttv_unregister_video(struct bttv *btv)
 static int __devinit bttv_register_video(struct bttv *btv)
 {
 	if (no_overlay > 0)
-		printk("bttv: Overlay support disabled.\n");
+		printk(KERN_INFO "bttv: Overlay support disabled.\n");
 
 	/* video */
 	btv->video_dev = vdev_init(btv, &bttv_video_template, "video");
@@ -4363,14 +4363,14 @@ static int __devinit bttv_probe(struct pci_dev *dev,
 	pci_read_config_byte(dev, PCI_LATENCY_TIMER, &lat);
 	printk(KERN_INFO "bttv%d: Bt%d (rev %d) at %s, ",
 	       bttv_num,btv->id, btv->revision, pci_name(dev));
-	printk("irq: %d, latency: %d, mmio: 0x%llx\n",
+	printk(KERN_INFO "irq: %d, latency: %d, mmio: 0x%llx\n",
 	       btv->c.pci->irq, lat,
 	       (unsigned long long)pci_resource_start(dev,0));
 	schedule();
 
 	btv->bt848_mmio = ioremap(pci_resource_start(dev, 0), 0x1000);
 	if (NULL == btv->bt848_mmio) {
-		printk("bttv%d: ioremap() failed\n", btv->c.nr);
+		printk(KERN_INFO "bttv%d: ioremap() failed\n", btv->c.nr);
 		result = -EIO;
 		goto fail1;
 	}
@@ -4489,7 +4489,7 @@ static void __devexit bttv_remove(struct pci_dev *pci_dev)
 	struct bttv *btv = to_bttv(v4l2_dev);
 
 	if (bttv_verbose)
-		printk("bttv%d: unloading\n",btv->c.nr);
+		printk(KERN_INFO "bttv%d: unloading\n", btv->c.nr);
 
 	/* shutdown everything (DMA+IRQs) */
 	btand(~15, BT848_GPIO_DMA_CTL);

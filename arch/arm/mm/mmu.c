@@ -258,6 +258,33 @@ static struct mem_type mem_types[] = {
 		.prot_sect = PMD_TYPE_SECT | PMD_SECT_AP_WRITE,
 		.domain    = DOMAIN_KERNEL,
 	},
+	[MT_MEMORY_DTCM] = {
+		.prot_pte	= L_PTE_PRESENT | L_PTE_YOUNG |
+		                  L_PTE_DIRTY | L_PTE_WRITE,
+		.prot_l1	= PMD_TYPE_TABLE,
+		.prot_sect	= PMD_TYPE_SECT | PMD_SECT_XN,
+		.domain		= DOMAIN_KERNEL,
+	},
+	[MT_MEMORY_ITCM] = {
+		.prot_pte  = L_PTE_PRESENT | L_PTE_YOUNG | L_PTE_DIRTY |
+				L_PTE_USER | L_PTE_EXEC,
+		.prot_l1   = PMD_TYPE_TABLE,
+		.domain    = DOMAIN_IO,
+	},
+	/* NOTE : this is only a temporary hack!!!
+	 *        The U8500 ED/V1.0 cuts require such a
+	 *        memory type for deep sleep resume.
+	 *        This is expected to be solved in cut v2.0
+	 *        and we clean this up then. for more details
+	 *        look @ the commit message please
+	 */
+	[MT_BACKUP_RAM] = {
+		.prot_pte       = PROT_PTE_DEVICE | L_PTE_MT_DEV_SHARED |
+			L_PTE_SHARED | L_PTE_EXEC,
+		.prot_l1        = PMD_TYPE_TABLE,
+		.prot_sect      = PROT_SECT_DEVICE | PMD_SECT_S,
+		.domain         = DOMAIN_IO,
+	},
 };
 
 const struct mem_type *get_mem_type(unsigned int type)
@@ -474,7 +501,7 @@ static void __init build_mem_type_table(void)
 		mem_types[MT_CACHECLEAN].prot_sect |= PMD_SECT_WB;
 		break;
 	}
-	printk("Memory policy: ECC %sabled, Data cache %s\n",
+	printk(KERN_INFO "Memory policy: ECC %sabled, Data cache %s\n",
 		ecc_mask ? "en" : "dis", cp->policy);
 
 	for (i = 0; i < ARRAY_SIZE(mem_types); i++) {

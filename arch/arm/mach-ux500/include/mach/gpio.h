@@ -9,42 +9,171 @@
 
 #include <plat/gpio.h>
 
-#define __GPIO_RESOURCE(soc, block)					\
-	{								\
-		.start	= soc##_GPIOBANK##block##_BASE,			\
-		.end	= soc##_GPIOBANK##block##_BASE + 127,		\
-		.flags	= IORESOURCE_MEM,				\
-	},								\
-	{								\
-		.start	= IRQ_GPIO##block,				\
-		.end	= IRQ_GPIO##block,				\
-		.flags	= IORESOURCE_IRQ,				\
-	}
+/* Used by test applications */
+#define GPIO_TOTAL_PINS		267
 
-#define __GPIO_DEVICE(soc, block)					\
-	{								\
-		.name		= "gpio",				\
-		.id		= block,				\
-		.num_resources	= 2,					\
-		.resource	= &soc##_gpio_resources[block * 2],	\
-		.dev = {						\
-			.platform_data = &soc##_gpio_data[block],	\
-		},							\
-	}
+#include <mach/hardware.h>
+#include <mach/irqs.h>
 
-#define GPIO_DATA(_name, first)						\
-	{								\
-		.name		= _name,				\
-		.first_gpio	= first,				\
-		.first_irq	= NOMADIK_GPIO_TO_IRQ(first),		\
-	}
+#define gpio_to_irq	__gpio_to_irq
 
-#ifdef CONFIG_UX500_SOC_DB8500
-#define GPIO_RESOURCE(block)	__GPIO_RESOURCE(U8500, block)
-#define GPIO_DEVICE(block)	__GPIO_DEVICE(u8500, block)
-#elif defined(CONFIG_UX500_SOC_DB5500)
-#define GPIO_RESOURCE(block)	__GPIO_RESOURCE(U5500, block)
-#define GPIO_DEVICE(block)	__GPIO_DEVICE(u5500, block)
+static inline int irq_to_gpio(unsigned int irq)
+{
+	if (irq < NR_IRQS)
+		return IRQ_TO_GPIO(irq);
+	else
+		return -EINVAL;
+}
+
+enum {
+	EGPIO_PIN_0 = U8500_NR_GPIO,
+	EGPIO_PIN_1,
+	EGPIO_PIN_2,
+	EGPIO_PIN_3,
+	EGPIO_PIN_4,
+	EGPIO_PIN_5,
+	EGPIO_PIN_6,
+	EGPIO_PIN_7,
+	EGPIO_PIN_8,
+	EGPIO_PIN_9,
+	EGPIO_PIN_10,
+	EGPIO_PIN_11,
+	EGPIO_PIN_12,
+	EGPIO_PIN_13,
+	EGPIO_PIN_14,
+	EGPIO_PIN_15,
+	EGPIO_PIN_16,
+	EGPIO_PIN_17,
+	EGPIO_PIN_18,
+	EGPIO_PIN_19,
+	EGPIO_PIN_20,
+	EGPIO_PIN_21,
+	EGPIO_PIN_22,
+	EGPIO_PIN_23,
+#ifdef CONFIG_AB8500_GPIO
+	AB8500_PIN_GPIO1,
+	AB8500_PIN_GPIO2,
+	AB8500_PIN_GPIO3,
+	AB8500_PIN_GPIO4,
+	AB8500_PIN_GPIO5,
+	AB8500_PIN_GPIO6,
+	AB8500_PIN_GPIO7,
+	AB8500_PIN_GPIO8,
+	AB8500_PIN_GPIO9,
+	AB8500_PIN_GPIO10,
+	AB8500_PIN_GPIO11,
+	AB8500_PIN_GPIO12,
+	AB8500_PIN_GPIO13,
+	AB8500_PIN_GPIO14,
+	AB8500_PIN_GPIO15,
+	AB8500_PIN_GPIO16,
+	AB8500_PIN_GPIO17,
+	AB8500_PIN_GPIO18,
+	AB8500_PIN_GPIO19,
+	AB8500_PIN_GPIO20,
+	AB8500_PIN_GPIO21,
+	AB8500_PIN_GPIO22,
+	AB8500_PIN_GPIO23,
+	AB8500_PIN_GPIO24,
+	AB8500_PIN_GPIO25,
+	AB8500_PIN_GPIO26,
+	AB8500_PIN_GPIO27,
+	AB8500_PIN_GPIO28,
+	AB8500_PIN_GPIO29,
+	AB8500_PIN_GPIO30,
+	AB8500_PIN_GPIO31,
+	AB8500_PIN_GPIO32,
+	AB8500_PIN_GPIO33,
+	AB8500_PIN_GPIO34,
+	AB8500_PIN_GPIO35,
+	AB8500_PIN_GPIO36,
+	AB8500_PIN_GPIO37,
+	AB8500_PIN_GPIO38,
+	AB8500_PIN_GPIO39,
+	AB8500_PIN_GPIO40,
+	AB8500_PIN_GPIO41,
+	AB8500_PIN_GPIO42,
 #endif
+};
 
-#endif /* __ASM_ARCH_GPIO_H */
+/* Don't use in new code -- use the plain numbers */
+#define GPIO_LOW	0
+#define GPIO_HIGH	1
+#define GPIO_DATA_LOW	0
+#define GPIO_DATA_HIGH	1
+#define GPIO(x)		(x)
+
+/*
+ * Alternate Function:
+ *  refered in altfun_table to pointout particular altfun to be enabled
+ *  when using GPIO_ALT_FUNCTION A/B/C enable/disable operation
+ */
+typedef enum {
+	GPIO_ALT_I2C_0,
+	GPIO_ALT_I2C_1,
+	GPIO_ALT_I2C_2,
+	GPIO_ALT_I2C_3,
+	GPIO_ALT_I2C_4,
+	GPIO_ALT_MSP_0,
+	GPIO_ALT_MSP_1,
+	GPIO_ALT_MSP_2,
+	GPIO_ALT_MSP_3,
+	GPIO_ALT_MM_CARD,
+	GPIO_ALT_SD_CARD,
+	GPIO_ALT_DMA_0,
+	GPIO_ALT_DMA_1,
+	GPIO_ALT_HSIR,
+	GPIO_ALT_CCIR656_INPUT,
+	GPIO_ALT_CCIR656_OUTPUT,
+	GPIO_ALT_LCD_PANELA,
+	GPIO_ALT_LCD_PANELB_ED,
+	GPIO_ALT_LCD_PANELB,
+	GPIO_ALT_MDIF,
+	GPIO_ALT_SDRAM,
+	GPIO_ALT_HAMAC_AUDIO_DBG,
+	GPIO_ALT_HAMAC_VIDEO_DBG,
+	GPIO_ALT_CLOCK_RESET,
+	GPIO_ALT_TSP,
+	GPIO_ALT_IRDA,
+	GPIO_ALT_USB_MINIMUM,
+	GPIO_ALT_USB_I2C,
+	GPIO_ALT_OWM,
+	GPIO_ALT_PWL,
+	GPIO_ALT_FSMC,
+	GPIO_ALT_COMP_FLASH,
+	GPIO_ALT_SRAM_NOR_FLASH,
+	GPIO_ALT_FSMC_ADDLINE_0_TO_15,
+	GPIO_ALT_SCROLL_KEY,
+	GPIO_ALT_MSHC,
+	GPIO_ALT_HPI,
+	GPIO_ALT_USB_OTG,
+	GPIO_ALT_SDIO,
+	GPIO_ALT_HSMMC,
+	GPIO_ALT_FSMC_ADD_DATA_0_TO_25,
+	GPIO_ALT_HSIT,
+	GPIO_ALT_NOR,
+	GPIO_ALT_NAND,
+	GPIO_ALT_KEYPAD,
+	GPIO_ALT_VPIP,
+	GPIO_ALT_CAM,
+	GPIO_ALT_CCP1,
+	GPIO_ALT_EMMC,
+	GPIO_ALT_SDMMC,
+	GPIO_ALT_TRACE,
+	GPIO_ALT_MMIO_INIT_BOARD,
+	GPIO_ALT_MMIO_CAM_SET_I2C,
+	GPIO_ALT_MMIO_CAM_SET_EXT_CLK,
+	GPIO_ALT_TRACE_MIPI60,
+	GPIO_ALT_SDMMC2,
+	GPIO_ALT_TP_SET_EXT_CLK,
+	GPIO_ALT_LCD_D_8,
+	GPIO_ALT_LCD_D_16,
+	GPIO_ALT_LCD_D_18,
+	GPIO_ALT_LCD_D_24,
+	GPIO_ALT_LCDA,
+	GPIO_ALT_LCDA_CLK,
+	GPIO_ALT_LCDB,
+	GPIO_ALT_FUNMAX		/* Add new alt func before this */
+} gpio_alt_function;
+
+#endif	/* __MACH_GPIO_H */

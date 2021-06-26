@@ -870,6 +870,11 @@ static void usb_bus_init (struct usb_bus *bus)
 	bus->bandwidth_isoc_reqs = 0;
 
 	INIT_LIST_HEAD (&bus->bus_list);
+#ifdef CONFIG_USB_OTG
+#ifdef CONFIG_USB_OTG_20
+	INIT_DELAYED_WORK(&bus->hnp_polling, usb_hnp_polling_work);
+#endif
+#endif
 }
 
 /*-------------------------------------------------------------------------*/
@@ -1259,7 +1264,7 @@ static void hcd_free_coherent(struct usb_bus *bus, dma_addr_t *dma_handle,
 	*dma_handle = 0;
 }
 
-static void unmap_urb_for_dma(struct usb_hcd *hcd, struct urb *urb)
+void unmap_urb_for_dma(struct usb_hcd *hcd, struct urb *urb)
 {
 	enum dma_data_direction dir;
 
@@ -1303,6 +1308,7 @@ static void unmap_urb_for_dma(struct usb_hcd *hcd, struct urb *urb)
 			URB_DMA_MAP_SG | URB_DMA_MAP_PAGE |
 			URB_DMA_MAP_SINGLE | URB_MAP_LOCAL);
 }
+EXPORT_SYMBOL_GPL(unmap_urb_for_dma);
 
 static int map_urb_for_dma(struct usb_hcd *hcd, struct urb *urb,
 			   gfp_t mem_flags)

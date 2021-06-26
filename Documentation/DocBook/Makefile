@@ -14,7 +14,15 @@ DOCBOOKS := z8530book.xml mcabook.xml device-drivers.xml \
 	    genericirq.xml s390-drivers.xml uio-howto.xml scsi.xml \
 	    mac80211.xml debugobjects.xml sh.xml regulator.xml \
 	    alsa-driver-api.xml writing-an-alsa-driver.xml \
-	    tracepoint.xml media.xml drm.xml
+	    tracepoint.xml media.xml drm.xml \
+	    u8500_usb.xml \
+	    ske_keypad.xml ste_ff_vibra.xml ste_timed_vibra.xml \
+	    dma.xml gpio.xml i2s.xml i2c.xml \
+	    prcmu-fw-api.xml msp.xml \
+	    touchp.xml tc_keypad.xml stmpe.xml shrm.xml \
+	    synaptics_rmi4_touchp.xml db5500_keypad.xml \
+	    u5500_LogicalMailbox.xml \
+		lsm303dlh.xml
 
 ###
 # The build process is as follows (targets):

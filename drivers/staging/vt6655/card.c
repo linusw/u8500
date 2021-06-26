@@ -1461,7 +1461,7 @@ BOOL CARDbRadioPowerOff (void *pDeviceHandler)
 
     pDevice->bRadioOff = TRUE;
      //2007-0409-03,<Add> by chester
-printk("chester power off\n");
+printk(KERN_INFO "chester power off\n");
 MACvRegBitsOn(pDevice->PortOffset, MAC_REG_GPIOCTL0, LED_ACTSET);  //LED issue
     return bResult;
 }
@@ -1483,15 +1483,17 @@ BOOL CARDbRadioPowerOn (void *pDeviceHandler)
 {
     PSDevice    pDevice = (PSDevice) pDeviceHandler;
     BOOL        bResult = TRUE;
-printk("chester power on\n");
+printk(KERN_INFO "chester power on\n");
     if (pDevice->bRadioControlOff == TRUE){
-if (pDevice->bHWRadioOff == TRUE) printk("chester bHWRadioOff\n");
-if (pDevice->bRadioControlOff == TRUE) printk("chester bRadioControlOff\n");
+	if (pDevice->bHWRadioOff == TRUE)
+		printk(KERN_INFO "chester bHWRadioOff\n");
+	if (pDevice->bRadioControlOff == TRUE)
+		printk(KERN_INFO "chester bRadioControlOff\n");
         return FALSE;}
 
     if (pDevice->bRadioOff == FALSE)
        {
-printk("chester pbRadioOff\n");
+printk(KERN_INFO "chester pbRadioOff\n");
 return TRUE;}
 
     BBvExitDeepSleep(pDevice->PortOffset, pDevice->byLocalID);
@@ -1516,7 +1518,7 @@ return TRUE;}
 
     pDevice->bRadioOff = FALSE;
 //  2007-0409-03,<Add> by chester
-printk("chester power on\n");
+printk(KERN_INFO "chester power on\n");
 MACvRegBitsOff(pDevice->PortOffset, MAC_REG_GPIOCTL0, LED_ACTSET); //LED issue
     return bResult;
 }

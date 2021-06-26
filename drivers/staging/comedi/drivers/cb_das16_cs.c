@@ -152,7 +152,7 @@ static const struct das16cs_board *das16cs_probe(struct comedi_device *dev,
 			return das16cs_boards + i;
 	}
 
-	printk("unknown board!\n");
+	printk(KERN_INFO "unknown board!\n");
 
 	return NULL;
 }
@@ -165,20 +165,20 @@ static int das16cs_attach(struct comedi_device *dev,
 	int ret;
 	int i;
 
-	printk("comedi%d: cb_das16_cs: ", dev->minor);
+	printk(KERN_INFO "comedi%d: cb_das16_cs: ", dev->minor);
 
 	link = cur_dev;		/* XXX hack */
 	if (!link)
 		return -EIO;
 
 	dev->iobase = link->io.BasePort1;
-	printk("I/O base=0x%04lx ", dev->iobase);
+	printk(KERN_INFO "I/O base=0x%04lx ", dev->iobase);
 
-	printk("fingerprint:\n");
+	printk(KERN_INFO "fingerprint:\n");
 	for (i = 0; i < 48; i += 2)
-		printk("%04x ", inw(dev->iobase + i));
+		printk(KERN_INFO "%04x ", inw(dev->iobase + i));
 
-	printk("\n");
+	printk(KERN_INFO "\n");
 
 	ret = request_irq(link->irq, das16cs_interrupt,
 			  IRQF_SHARED, "cb_das16_cs", dev);
@@ -187,7 +187,7 @@ static int das16cs_attach(struct comedi_device *dev,
 
 	dev->irq = link->irq;
 
-	printk("irq=%u ", dev->irq);
+	printk(KERN_INFO "irq=%u ", dev->irq);
 
 	dev->board_ptr = das16cs_probe(dev, link);
 	if (!dev->board_ptr)
@@ -254,14 +254,14 @@ static int das16cs_attach(struct comedi_device *dev,
 		s->type = COMEDI_SUBD_UNUSED;
 	}
 
-	printk("attached\n");
+	printk(KERN_INFO "attached\n");
 
 	return 1;
 }
 
 static int das16cs_detach(struct comedi_device *dev)
 {
-	printk("comedi%d: das16cs: remove\n", dev->minor);
+	printk(KERN_INFO "comedi%d: das16cs: remove\n", dev->minor);
 
 	if (dev->irq)
 		free_irq(dev->irq, dev);
@@ -314,7 +314,7 @@ static int das16cs_ai_rinsn(struct comedi_device *dev,
 				break;
 		}
 		if (to == TIMEOUT) {
-			printk("cb_das16_cs: ai timeout\n");
+			printk(KERN_INFO "cb_das16_cs: ai timeout\n");
 			return -ETIME;
 		}
 		data[i] = (unsigned short)inw(dev->iobase + 0);
@@ -787,14 +787,14 @@ static void das16cs_pcmcia_config(struct pcmcia_device *link)
 	/* Finally, report what we've done */
 	dev_info(&link->dev, "index 0x%02x", link->conf.ConfigIndex);
 	if (link->conf.Attributes & CONF_ENABLE_IRQ)
-		printk(", irq %u", link->irq);
+		printk(KERN_INFO ", irq %u", link->irq);
 	if (link->io.NumPorts1)
-		printk(", io 0x%04x-0x%04x", link->io.BasePort1,
+		printk(KERN_INFO ", io 0x%04x-0x%04x", link->io.BasePort1,
 		       link->io.BasePort1 + link->io.NumPorts1 - 1);
 	if (link->io.NumPorts2)
-		printk(" & 0x%04x-0x%04x", link->io.BasePort2,
+		printk(KERN_INFO " & 0x%04x-0x%04x", link->io.BasePort2,
 		       link->io.BasePort2 + link->io.NumPorts2 - 1);
-	printk("\n");
+	printk(KERN_INFO "\n");
 
 	return;
 

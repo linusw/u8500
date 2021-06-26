@@ -18,18 +18,21 @@
 #include <linux/resource.h>
 
 #define AMBA_NR_IRQS	2
+#define AMBA_CID	0xb105f00d
 
 struct amba_device {
 	struct device		dev;
 	struct resource		res;
 	u64			dma_mask;
 	unsigned int		periphid;
+	const char		*name;
 	unsigned int		irq[AMBA_NR_IRQS];
 };
 
 struct amba_id {
 	unsigned int		id;
 	unsigned int		mask;
+	const char		*name;
 	void			*data;
 };
 
@@ -48,6 +51,10 @@ enum amba_vendor {
 	AMBA_VENDOR_ST = 0x80,
 };
 
+extern struct bus_type amba_bustype;
+
+#define to_amba_device(d)	container_of(d, struct amba_device, dev)
+
 #define amba_get_drvdata(d)	dev_get_drvdata(&d->dev)
 #define amba_set_drvdata(d,p)	dev_set_drvdata(&d->dev, p)
 
@@ -59,9 +66,15 @@ struct amba_device *amba_find_device(const char *, struct device *, unsigned int
 int amba_request_regions(struct amba_device *, const char *);
 void amba_release_regions(struct amba_device *);
 
-#define amba_config(d)	(((d)->periphid >> 24) & 0xff)
-#define amba_rev(d)	(((d)->periphid >> 20) & 0x0f)
-#define amba_manf(d)	(((d)->periphid >> 12) & 0xff)
-#define amba_part(d)	((d)->periphid & 0xfff)
+/* Some drivers don't use the struct amba_device */
+#define AMBA_CONFIG_BITS(a) (((a) >> 24) & 0xff)
+#define AMBA_REV_BITS(a) (((a) >> 20) & 0x0f)
+#define AMBA_MANF_BITS(a) (((a) >> 12) & 0xff)
+#define AMBA_PART_BITS(a) ((a) & 0xfff)
+
+#define amba_config(d)	AMBA_CONFIG_BITS((d)->periphid)
+#define amba_rev(d)	AMBA_REV_BITS((d)->periphid)
+#define amba_manf(d)	AMBA_MANF_BITS((d)->periphid)
+#define amba_part(d)	AMBA_PART_BITS((d)->periphid)
 
 #endif

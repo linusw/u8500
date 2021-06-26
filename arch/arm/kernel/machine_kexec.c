@@ -13,6 +13,8 @@
 #include <asm/cacheflush.h>
 #include <asm/mach-types.h>
 
+#include <linux/smp.h>
+
 extern const unsigned char relocate_new_kernel[];
 extern const unsigned int relocate_new_kernel_size;
 
@@ -22,6 +24,8 @@ extern unsigned long kexec_start_address;
 extern unsigned long kexec_indirection_page;
 extern unsigned long kexec_mach_type;
 extern unsigned long kexec_boot_atags;
+
+static atomic_t waiting_for_crash_ipi;
 
 /*
  * Provide a dummy crash_notes definition while crash dump arrives to arm.
@@ -41,8 +45,40 @@ void machine_shutdown(void)
 {
 }
 
+void machine_crash_nonpanic_core(void *info)
+{
+	struct pt_regs regs;
+
+	crash_setup_regs(&regs, NULL);
+	printk(KERN_EMERG "CPU %u will stop doing anything useful since another CPU has crashed\n",
+	       smp_processor_id());
+	crash_save_cpu(&regs, smp_processor_id());
+	atomic_notifier_call_chain(&crash_percpu_notifier_list, 0, NULL);
+	flush_cache_all();
+
+	atomic_dec(&waiting_for_crash_ipi);
+	while (1)
+		cpu_relax();
+}
+
 void machine_crash_shutdown(struct pt_regs *regs)
 {
+	unsigned long msecs;
+
+	atomic_set(&waiting_for_crash_ipi, num_online_cpus() - 1);
+
+	local_irq_enable();
+	smp_call_function(machine_crash_nonpanic_core, NULL, false);
+	msecs = 1000; /* Wait at most a second for the other cpus to stop */
+	while ((atomic_read(&waiting_for_crash_ipi) > 0) && msecs) {
+		mdelay(1);
+		msecs--;
+	}
+	local_irq_disable();
+
+	crash_save_cpu(regs, smp_processor_id());
+
+	printk(KERN_INFO "Loading crashdump kernel...\n");
 }
 
 void machine_kexec(struct kimage *image)
@@ -74,7 +110,9 @@ void machine_kexec(struct kimage *image)
 			   (unsigned long) reboot_code_buffer + KEXEC_CONTROL_PAGE_SIZE);
 	printk(KERN_INFO "Bye!\n");
 
+	outer_flush_all();
+	outer_disable();
 	cpu_proc_fin();
-	setup_mm_for_reboot(0); /* mode is not used, so just pass 0*/
+	outer_inv_all();
 	cpu_reset(reboot_code_buffer_phys);
 }

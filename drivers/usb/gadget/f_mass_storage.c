@@ -295,7 +295,12 @@
 
 #include "gadget_chips.h"
 
+#ifdef CONFIG_USB_ANDROID_MASS_STORAGE
+#include <linux/usb/android_composite.h>
+#include <linux/platform_device.h>
 
+#define FUNCTION_NAME		"usb_mass_storage"
+#endif
 
 /*------------------------------------------------------------------------*/
 
@@ -312,6 +317,31 @@ static const char fsg_string_interface[] = "Mass Storage";
 
 #include "storage_common.c"
 
+
+/*
+ * Debugging macro and defines
+ */
+/* #undef CSY_DEBUG */
+#define CSY_DEBUG
+
+#ifdef CSY_DEBUG
+#define CSY_DBG(fmt, args...) \
+	printk(KERN_INFO "[f_mass_storage] %s:%d "fmt, __func__, __LINE__, ##args)
+#else /* DO NOT PRINT LOG */
+#define CSY_DBG(fmt, args...) do { } while (0)
+#endif /* CSY_DEBUG */
+/*
+#ifdef CSY_DEBUG
+#undef DBG
+#define DBG(devvalue, fmt, args...) \
+	printk(KERN_INFO "[f_mass_storage] %s:%d "fmt, __func__, __LINE__, ##args)
+#endif
+#ifdef CSY_DEBUG
+#undef VDBG
+#define VDBG(devvalue, fmt, args...) \
+	printk(KERN_INFO "[f_mass_storage] %s:%d "fmt, __func__, __LINE__, ##args)
+#endif
+*/
 
 /*-------------------------------------------------------------------------*/
 
@@ -408,6 +438,10 @@ struct fsg_config {
 	u16 release;
 
 	char			can_stall;
+
+#ifdef CONFIG_USB_ANDROID_MASS_STORAGE
+	struct platform_device *pdev;
+#endif
 };
 
 
@@ -596,6 +630,7 @@ static int fsg_setup(struct usb_function *f,
 
 	if (!fsg_is_set(fsg->common))
 		return -EOPNOTSUPP;
+	CSY_DBG("nluns=%d \n", fsg->common->nluns);
 
 	switch (ctrl->bRequest) {
 
@@ -616,8 +651,11 @@ static int fsg_setup(struct usb_function *f,
 		if (ctrl->bRequestType !=
 		    (USB_DIR_IN | USB_TYPE_CLASS | USB_RECIP_INTERFACE))
 			break;
-		if (w_index != fsg->interface_number || w_value != 0)
+//		if (w_index != fsg->interface_number || w_value != 0)  - for support two Luns in ums mode
+		if (w_value != 0)	{
+			CSY_DBG("w_index=%d, fsg->interface_number=%d, w_value=%d \n", w_index, fsg->interface_number, w_value);
 			return -EDOM;
+			}
 		VDBG(fsg, "get max LUN\n");
 		*(u8 *) req->buf = fsg->common->nluns - 1;
 
@@ -872,11 +910,13 @@ static int do_write(struct fsg_common *common)
 			curlun->sense_data = SS_INVALID_FIELD_IN_CDB;
 			return -EINVAL;
 		}
+#ifndef CONFIG_USB_ANDROID_MASS_STORAGE		
 		if (common->cmnd[1] & 0x08) {	/* FUA */
 			spin_lock(&curlun->filp->f_lock);
 			curlun->filp->f_flags |= O_SYNC;
 			spin_unlock(&curlun->filp->f_lock);
 		}
+#endif
 	}
 	if (lba >= curlun->num_sectors) {
 		curlun->sense_data = SS_LOGICAL_BLOCK_ADDRESS_OUT_OF_RANGE;
@@ -1152,11 +1192,17 @@ static int do_verify(struct fsg_common *common)
 
 
 /*-------------------------------------------------------------------------*/
+#if defined(CONFIG_USB_ANDROID_SAMSUNG_COMPOSITE) && defined(CONFIG_TARGET_LOCALE_KOR)
+static char product_name[16 + 1];
+#endif
 
 static int do_inquiry(struct fsg_common *common, struct fsg_buffhd *bh)
 {
 	struct fsg_lun *curlun = common->curlun;
 	u8	*buf = (u8 *) bh->buf;
+#if defined(CONFIG_USB_ANDROID_SAMSUNG_COMPOSITE) && defined(CONFIG_TARGET_LOCALE_KOR)
+	struct usb_mass_storage_platform_data *pdata;
+#endif
 
 	if (!curlun) {		/* Unsupported LUNs are okay */
 		common->bad_lun_okay = 1;
@@ -1174,6 +1220,30 @@ static int do_inquiry(struct fsg_common *common, struct fsg_buffhd *bh)
 	buf[5] = 0;		/* No special options */
 	buf[6] = 0;
 	buf[7] = 0;
+
+#if defined(CONFIG_USB_ANDROID_SAMSUNG_COMPOSITE) && defined(CONFIG_TARGET_LOCALE_KOR)
+#define OR(x, y) ((x) ? (x) : (y))
+	if (curlun->dev.parent) {
+		pdata = curlun->dev.parent->platform_data;
+
+		if (pdata) {
+			strncpy(product_name, OR(pdata->product, "UMS"), 16);
+			product_name[16] = '\0';
+			if (pdata->product && common->lun > 0) {
+				strncat(product_name, " Card", 16);
+				product_name[16] = '\0';
+			}
+
+			snprintf(common->inquiry_string,
+				sizeof common->inquiry_string,
+				"%-8s%-16s%04x",
+				OR(pdata->vendor, "SAMSUNG"),
+				product_name,
+				OR(pdata->release, 1));
+		}
+	}
+#endif
+
 	memcpy(buf + 8, common->inquiry_string, sizeof common->inquiry_string);
 	return 36;
 }
@@ -1841,6 +1911,7 @@ static int check_command(struct fsg_common *common, int cmnd_size,
 			cmnd_size = common->cmnd_size;
 		} else {
 			common->phase_error = 1;
+			CSY_DBG("[phase_error] cmnd_size=%d,common->cmnd_size=%d \n", cmnd_size, common->cmnd_size);
 			return -EINVAL;
 		}
 	}
@@ -2670,6 +2741,8 @@ static struct fsg_common *fsg_common_init(struct fsg_common *common,
 
 	/* Find out how many LUNs there should be */
 	nluns = cfg->nluns;
+	CSY_DBG("nluns=%d \n", nluns);
+	
 	if (nluns < 1 || nluns > FSG_MAX_LUNS) {
 		dev_err(&gadget->dev, "invalid number of LUNs: %u\n", nluns);
 		return ERR_PTR(-EINVAL);
@@ -2717,7 +2790,13 @@ static struct fsg_common *fsg_common_init(struct fsg_common *common,
 		curlun->ro = lcfg->cdrom || lcfg->ro;
 		curlun->removable = lcfg->removable;
 		curlun->dev.release = fsg_lun_release;
+
+#ifdef CONFIG_USB_ANDROID_MASS_STORAGE
+		/* use "usb_mass_storage" platform device as parent */
+		curlun->dev.parent = &cfg->pdev->dev;
+#else
 		curlun->dev.parent = &gadget->dev;
+#endif
 		/* curlun->dev.driver = &fsg_driver.driver; XXX */
 		dev_set_drvdata(&curlun->dev, &common->filesem);
 		dev_set_name(&curlun->dev,
@@ -2742,6 +2821,7 @@ static struct fsg_common *fsg_common_init(struct fsg_common *common,
 
 		if (lcfg->filename) {
 			rc = fsg_lun_open(curlun, lcfg->filename);
+			CSY_DBG("flie name =%s \n", lcfg->filename);
 			if (rc)
 				goto error_luns;
 		} else if (!curlun->removable) {
@@ -2751,6 +2831,7 @@ static struct fsg_common *fsg_common_init(struct fsg_common *common,
 		}
 	}
 	common->nluns = nluns;
+	CSY_DBG("nluns=%d \n", common->nluns);
 
 
 	/* Data buffers cyclic list */
@@ -2896,7 +2977,8 @@ static void fsg_common_release(struct kref *ref)
 		struct fsg_buffhd *bh = common->buffhds;
 		unsigned i = FSG_NUM_BUFFERS;
 		do {
-			kfree(bh->buf);
+			if (bh->buf)
+				kfree(bh->buf);
 		} while (++bh, --i);
 	}
 
@@ -3001,7 +3083,11 @@ static int fsg_add(struct usb_composite_dev *cdev,
 	if (unlikely(!fsg))
 		return -ENOMEM;
 
+#ifdef CONFIG_USB_ANDROID_MASS_STORAGE
+	fsg->function.name        = FUNCTION_NAME;
+#else
 	fsg->function.name        = FSG_DRIVER_DESC;
+#endif
 	fsg->function.strings     = fsg_strings_array;
 	fsg->function.bind        = fsg_bind;
 	fsg->function.unbind      = fsg_unbind;
@@ -3117,4 +3203,64 @@ fsg_common_from_params(struct fsg_common *common,
 	fsg_config_from_params(&cfg, params);
 	return fsg_common_init(common, cdev, &cfg);
 }
+
+#ifdef CONFIG_USB_ANDROID_MASS_STORAGE
+
+static struct fsg_config fsg_cfg;
+
+static int fsg_probe(struct platform_device *pdev)
+{
+	struct usb_mass_storage_platform_data *pdata = pdev->dev.platform_data;
+	int i, nluns;
+
+	printk(KERN_INFO "fsg_probe pdev: %p, pdata: %p\n", pdev, pdata);
+	if (!pdata)
+		return -1;
+
+	nluns = pdata->nluns;
+	if (nluns > FSG_MAX_LUNS)
+		nluns = FSG_MAX_LUNS;
+	fsg_cfg.nluns = nluns;
+	for (i = 0; i < nluns; i++)
+		fsg_cfg.luns[i].removable = 1;
+
+	fsg_cfg.vendor_name = pdata->vendor;
+	fsg_cfg.product_name = pdata->product;
+	fsg_cfg.release = pdata->release;
+	fsg_cfg.can_stall = 0;
+	fsg_cfg.pdev = pdev;
+
+	return 0;
+}
+
+static struct platform_driver fsg_platform_driver = {
+	.driver = { .name = FUNCTION_NAME, },
+	.probe = fsg_probe,
+};
+
+int mass_storage_bind_config(struct usb_configuration *c)
+{
+	struct fsg_common *common = fsg_common_init(NULL, c->cdev, &fsg_cfg);
+	if (IS_ERR(common))
+		return -1;
+	return fsg_add(c->cdev, c, common);
+}
+
+static struct android_usb_function mass_storage_function = {
+	.name = FUNCTION_NAME,
+	.bind_config = mass_storage_bind_config,
+};
+
+static int __init init(void)
+{
+	int		rc;
+	printk(KERN_INFO "f_mass_storage init\n");
+	rc = platform_driver_register(&fsg_platform_driver);
+	if (rc != 0)
+		return rc;
+	android_register_function(&mass_storage_function);
+	return 0;
+}module_init(init);
+
+#endif /* CONFIG_USB_ANDROID_MASS_STORAGE */
 

@@ -151,4 +151,7 @@ config HAVE_MIXED_BREAKPOINTS_REGS
 config HAVE_USER_RETURN_NOTIFIER
 	bool
 
+config HEART_BEATING
+	bool "Heart Beating (Samsung)"
+
 source "kernel/gcov/Kconfig"

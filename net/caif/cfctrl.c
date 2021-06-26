@@ -4,6 +4,8 @@
  * License terms: GNU General Public License (GPL) version 2
  */
 
+#define pr_fmt(fmt) KBUILD_MODNAME ":%s(): " fmt, __func__
+
 #include <linux/stddef.h>
 #include <linux/spinlock.h>
 #include <linux/slab.h>
@@ -19,7 +21,7 @@
 #ifdef CAIF_NO_LOOP
 static int handle_loop(struct cfctrl *ctrl,
 			      int cmd, struct cfpkt *pkt){
-	return CAIF_FAILURE;
+	return -1;
 }
 #else
 static int handle_loop(struct cfctrl *ctrl,
@@ -36,14 +38,14 @@ struct cflayer *cfctrl_create(void)
 	struct cfctrl *this =
 		kmalloc(sizeof(struct cfctrl), GFP_ATOMIC);
 	if (!this) {
-		pr_warning("CAIF: %s(): Out of memory\n", __func__);
+		pr_warn("Out of memory\n");
 		return NULL;
 	}
 	caif_assert(offsetof(struct cfctrl, serv.layer) == 0);
 	memset(&dev_info, 0, sizeof(dev_info));
 	dev_info.id = 0xff;
 	memset(this, 0, sizeof(*this));
-	cfsrvl_init(&this->serv, 0, &dev_info);
+	cfsrvl_init(&this->serv, 0, &dev_info, false);
 	atomic_set(&this->req_seq_no, 1);
 	atomic_set(&this->rsp_seq_no, 1);
 	this->serv.layer.receive = cfctrl_recv;
@@ -56,7 +58,8 @@ struct cflayer *cfctrl_create(void)
 	return &this->serv.layer;
 }
 
-static bool param_eq(struct cfctrl_link_param *p1, struct cfctrl_link_param *p2)
+static bool param_eq(const struct cfctrl_link_param *p1,
+			const struct cfctrl_link_param *p2)
 {
 	bool eq =
 	    p1->linktype == p2->linktype &&
@@ -98,8 +101,8 @@ static bool param_eq(struct cfctrl_link_param *p1, struct cfctrl_link_param *p2)
 	return false;
 }
 
-bool cfctrl_req_eq(struct cfctrl_request_info *r1,
-		   struct cfctrl_request_info *r2)
+static bool cfctrl_req_eq(const struct cfctrl_request_info *r1,
+			  const struct cfctrl_request_info *r2)
 {
 	if (r1->cmd != r2->cmd)
 		return false;
@@ -110,7 +113,7 @@ bool cfctrl_req_eq(struct cfctrl_request_info *r1,
 }
 
 /* Insert request at the end */
-void cfctrl_insert_req(struct cfctrl *ctrl,
+static void cfctrl_insert_req(struct cfctrl *ctrl,
 			      struct cfctrl_request_info *req)
 {
 	spin_lock(&ctrl->info_list_lock);
@@ -121,8 +124,8 @@ void cfctrl_insert_req(struct cfctrl *ctrl,
 }
 
 /* Compare and remove request */
-struct cfctrl_request_info *cfctrl_remove_req(struct cfctrl *ctrl,
-					      struct cfctrl_request_info *req)
+static struct cfctrl_request_info *cfctrl_remove_req(struct cfctrl *ctrl,
+						struct cfctrl_request_info *req)
 {
 	struct cfctrl_request_info *p, *tmp, *first;
 
@@ -132,9 +135,7 @@ struct cfctrl_request_info *cfctrl_remove_req(struct cfctrl *ctrl,
 	list_for_each_entry_safe(p, tmp, &ctrl->list, list) {
 		if (cfctrl_req_eq(req, p)) {
 			if (p != first)
-				pr_warning("CAIF: %s(): Requests are not "
-					"received in order\n",
-					__func__);
+				pr_warn("Requests are not received in order\n");
 
 			atomic_set(&ctrl->rsp_seq_no,
 					 p->sequence_no);
@@ -154,16 +155,6 @@ struct cfctrl_rsp *cfctrl_get_respfuncs(struct cflayer *layer)
 	return &this->res;
 }
 
-void cfctrl_set_dnlayer(struct cflayer *this, struct cflayer *dn)
-{
-	this->dn = dn;
-}
-
-void cfctrl_set_uplayer(struct cflayer *this, struct cflayer *up)
-{
-	this->up = up;
-}
-
 static void init_info(struct caif_payload_info *info, struct cfctrl *cfctrl)
 {
 	info->hdr_len = 0;
@@ -177,7 +168,7 @@ void cfctrl_enum_req(struct cflayer *layer, u8 physlinkid)
 	int ret;
 	struct cfpkt *pkt = cfpkt_create(CFPKT_CTRL_PKT_LEN);
 	if (!pkt) {
-		pr_warning("CAIF: %s(): Out of memory\n", __func__);
+		pr_warn("Out of memory\n");
 		return;
 	}
 	caif_assert(offsetof(struct cfctrl, serv.layer) == 0);
@@ -189,8 +180,7 @@ void cfctrl_enum_req(struct cflayer *layer, u8 physlinkid)
 	ret =
 	    cfctrl->serv.layer.dn->transmit(cfctrl->serv.layer.dn, pkt);
 	if (ret < 0) {
-		pr_err("CAIF: %s(): Could not transmit enum message\n",
-			__func__);
+		pr_err("Could not transmit enum message\n");
 		cfpkt_destroy(pkt);
 	}
 }
@@ -208,7 +198,7 @@ int cfctrl_linkup_request(struct cflayer *layer,
 	char utility_name[16];
 	struct cfpkt *pkt = cfpkt_create(CFPKT_CTRL_PKT_LEN);
 	if (!pkt) {
-		pr_warning("CAIF: %s(): Out of memory\n", __func__);
+		pr_warn("Out of memory\n");
 		return -ENOMEM;
 	}
 	cfpkt_addbdy(pkt, CFCTRL_CMD_LINK_SETUP);
@@ -253,13 +243,13 @@ int cfctrl_linkup_request(struct cflayer *layer,
 			       param->u.utility.paramlen);
 		break;
 	default:
-		pr_warning("CAIF: %s():Request setup of bad link type = %d\n",
-			   __func__, param->linktype);
+		pr_warn("Request setup of bad link type = %d\n",
+			param->linktype);
 		return -EINVAL;
 	}
 	req = kzalloc(sizeof(*req), GFP_KERNEL);
 	if (!req) {
-		pr_warning("CAIF: %s(): Out of memory\n", __func__);
+		pr_warn("Out of memory\n");
 		return -ENOMEM;
 	}
 	req->client_layer = user_layer;
@@ -276,8 +266,7 @@ int cfctrl_linkup_request(struct cflayer *layer,
 	ret =
 	    cfctrl->serv.layer.dn->transmit(cfctrl->serv.layer.dn, pkt);
 	if (ret < 0) {
-		pr_err("CAIF: %s(): Could not transmit linksetup request\n",
-			__func__);
+		pr_err("Could not transmit linksetup request\n");
 		cfpkt_destroy(pkt);
 		return -ENODEV;
 	}
@@ -291,7 +280,7 @@ int cfctrl_linkdown_req(struct cflayer *layer, u8 channelid,
 	struct cfctrl *cfctrl = container_obj(layer);
 	struct cfpkt *pkt = cfpkt_create(CFPKT_CTRL_PKT_LEN);
 	if (!pkt) {
-		pr_warning("CAIF: %s(): Out of memory\n", __func__);
+		pr_warn("Out of memory\n");
 		return -ENOMEM;
 	}
 	cfpkt_addbdy(pkt, CFCTRL_CMD_LINK_DESTROY);
@@ -300,76 +289,21 @@ int cfctrl_linkdown_req(struct cflayer *layer, u8 channelid,
 	ret =
 	    cfctrl->serv.layer.dn->transmit(cfctrl->serv.layer.dn, pkt);
 	if (ret < 0) {
-		pr_err("CAIF: %s(): Could not transmit link-down request\n",
-			__func__);
+		pr_err("Could not transmit link-down request\n");
 		cfpkt_destroy(pkt);
 	}
 	return ret;
 }
-
-void cfctrl_sleep_req(struct cflayer *layer)
-{
-	int ret;
-	struct cfctrl *cfctrl = container_obj(layer);
-	struct cfpkt *pkt = cfpkt_create(CFPKT_CTRL_PKT_LEN);
-	if (!pkt) {
-		pr_warning("CAIF: %s(): Out of memory\n", __func__);
-		return;
-	}
-	cfpkt_addbdy(pkt, CFCTRL_CMD_SLEEP);
-	init_info(cfpkt_info(pkt), cfctrl);
-	ret =
-	    cfctrl->serv.layer.dn->transmit(cfctrl->serv.layer.dn, pkt);
-	if (ret < 0)
-		cfpkt_destroy(pkt);
-}
-
-void cfctrl_wake_req(struct cflayer *layer)
-{
-	int ret;
-	struct cfctrl *cfctrl = container_obj(layer);
-	struct cfpkt *pkt = cfpkt_create(CFPKT_CTRL_PKT_LEN);
-	if (!pkt) {
-		pr_warning("CAIF: %s(): Out of memory\n", __func__);
-		return;
-	}
-	cfpkt_addbdy(pkt, CFCTRL_CMD_WAKE);
-	init_info(cfpkt_info(pkt), cfctrl);
-	ret =
-	    cfctrl->serv.layer.dn->transmit(cfctrl->serv.layer.dn, pkt);
-	if (ret < 0)
-		cfpkt_destroy(pkt);
-}
-
-void cfctrl_getstartreason_req(struct cflayer *layer)
-{
-	int ret;
-	struct cfctrl *cfctrl = container_obj(layer);
-	struct cfpkt *pkt = cfpkt_create(CFPKT_CTRL_PKT_LEN);
-	if (!pkt) {
-		pr_warning("CAIF: %s(): Out of memory\n", __func__);
-		return;
-	}
-	cfpkt_addbdy(pkt, CFCTRL_CMD_START_REASON);
-	init_info(cfpkt_info(pkt), cfctrl);
-	ret =
-	    cfctrl->serv.layer.dn->transmit(cfctrl->serv.layer.dn, pkt);
-	if (ret < 0)
-		cfpkt_destroy(pkt);
-}
-
 
 void cfctrl_cancel_req(struct cflayer *layr, struct cflayer *adap_layer)
 {
 	struct cfctrl_request_info *p, *tmp;
 	struct cfctrl *ctrl = container_obj(layr);
 	spin_lock(&ctrl->info_list_lock);
-	pr_warning("CAIF: %s(): enter\n", __func__);
 
 	list_for_each_entry_safe(p, tmp, &ctrl->list, list) {
 		if (p->client_layer == adap_layer) {
-			pr_warning("CAIF: %s(): cancel req :%d\n", __func__,
-					p->sequence_no);
+			pr_debug("cancel req :%d\n", p->sequence_no);
 			list_del(&p->list);
 			kfree(p);
 		}
@@ -395,7 +329,7 @@ static int cfctrl_recv(struct cflayer *layer, struct cfpkt *pkt)
 	cmd = cmdrsp & CFCTRL_CMD_MASK;
 	if (cmd != CFCTRL_CMD_LINK_ERR
 	    && CFCTRL_RSP_BIT != (CFCTRL_RSP_BIT & cmdrsp)) {
-		if (handle_loop(cfctrl, cmd, pkt) == CAIF_FAILURE)
+		if (handle_loop(cfctrl, cmd, pkt) != 0)
 			cmdrsp |= CFCTRL_ERR_BIT;
 	}
 
@@ -520,9 +454,8 @@ static int cfctrl_recv(struct cflayer *layer, struct cfpkt *pkt)
 				cfpkt_extr_head(pkt, &param, len);
 				break;
 			default:
-				pr_warning("CAIF: %s(): Request setup "
-					   "- invalid link type (%d)",
-					   __func__, serv);
+				pr_warn("Request setup - invalid link type (%d)\n",
+					serv);
 				goto error;
 			}
 
@@ -532,9 +465,7 @@ static int cfctrl_recv(struct cflayer *layer, struct cfpkt *pkt)
 
 			if (CFCTRL_ERR_BIT == (CFCTRL_ERR_BIT & cmdrsp) ||
 				cfpkt_erroneous(pkt)) {
-				pr_err("CAIF: %s(): Invalid O/E bit or parse "
-				       "error on CAIF control channel",
-					__func__);
+				pr_err("Invalid O/E bit or parse error on CAIF control channel\n");
 				cfctrl->res.reject_rsp(cfctrl->serv.layer.up,
 						       0,
 						       req ? req->client_layer
@@ -556,8 +487,7 @@ static int cfctrl_recv(struct cflayer *layer, struct cfpkt *pkt)
 		cfctrl->res.linkdestroy_rsp(cfctrl->serv.layer.up, linkid);
 		break;
 	case CFCTRL_CMD_LINK_ERR:
-		pr_err("CAIF: %s(): Frame Error Indication received\n",
-			__func__);
+		pr_err("Frame Error Indication received\n");
 		cfctrl->res.linkerror_ind();
 		break;
 	case CFCTRL_CMD_ENUM:
@@ -576,7 +506,7 @@ static int cfctrl_recv(struct cflayer *layer, struct cfpkt *pkt)
 		cfctrl->res.radioset_rsp();
 		break;
 	default:
-		pr_err("CAIF: %s(): Unrecognized Control Frame\n", __func__);
+		pr_err("Unrecognized Control Frame\n");
 		goto error;
 		break;
 	}
@@ -595,8 +525,7 @@ static void cfctrl_ctrlcmd(struct cflayer *layr, enum caif_ctrlcmd ctrl,
 	case CAIF_CTRLCMD_FLOW_OFF_IND:
 		spin_lock(&this->info_list_lock);
 		if (!list_empty(&this->list)) {
-			pr_debug("CAIF: %s(): Received flow off in "
-				   "control layer", __func__);
+			pr_debug("Received flow off in control layer\n");
 		}
 		spin_unlock(&this->info_list_lock);
 		break;
@@ -620,7 +549,7 @@ static int handle_loop(struct cfctrl *ctrl, int cmd, struct cfpkt *pkt)
 			if (!ctrl->loop_linkused[linkid])
 				goto found;
 		spin_unlock(&ctrl->loop_linkid_lock);
-		pr_err("CAIF: %s(): Out of link-ids\n", __func__);
+		pr_err("Out of link-ids\n");
 		return -EINVAL;
 found:
 		if (!ctrl->loop_linkused[linkid])
@@ -647,6 +576,6 @@ found:
 	default:
 		break;
 	}
-	return CAIF_SUCCESS;
+	return 0;
 }
 #endif

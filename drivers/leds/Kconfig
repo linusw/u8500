@@ -15,6 +15,13 @@ config LEDS_CLASS
 	  This option enables the led sysfs class in /sys/class/leds.  You'll
 	  need this to do anything useful with LEDs.  If unsure, say N.
 
+config FLASH_LED_KTD267
+	depends on NEW_LEDS
+	tristate "FLASH LED KTD267 driver"
+	default n
+	help
+	  This option enables the driver for FLASH LED KTD267.
+
 if LEDS_CLASS
 
 comment "LED drivers"
@@ -32,6 +39,23 @@ config LEDS_ATMEL_PWM
 	help
 	  This option enables support for LEDs driven using outputs
 	  of the dedicated PWM controller found on newer Atmel SOCs.
+
+config LEDS_LM3530
+	tristate "LCD Backlight driver for LM3530"
+	depends on I2C
+	help
+	  This option enables support for the LCD backlight using
+	  LM3530 ambient light sensor chip. This ALS chip can be
+	  controlled manually or using PWM input or using ambient
+	  light automatically.
+
+config LEDS_AB5500
+	tristate "HVLED driver for AB5500"
+	depends on AB5500_CORE
+	help
+	  This option enables support for the HVLED in AB5500
+	  multi function device. Currently Ab5500 v1.0 chip leds
+	  are supported.
 
 config LEDS_LOCOMO
 	tristate "LED Support for Locomo device"
@@ -295,6 +319,16 @@ config LEDS_DELL_NETBOOKS
 	  This adds support for the Latitude 2100 and similar
 	  notebooks that have an external LED.
 
+config LEDS_LP5521
+	tristate "LED Support for the LP5521 LEDs"
+	depends on LEDS_CLASS && I2C
+	help
+	If you say 'Y' here you get support for the National Semiconductor
+	LP5521 LED driver used in n8x0 boards.
+
+	  This driver can be built as a module by choosing 'M'. The module
+	  will be called leds-lp5521.
+
 config LEDS_MC13783
 	tristate "LED Support for MC13783 PMIC"
 	depends on MFD_MC13783
@@ -363,6 +397,12 @@ config LEDS_TRIGGER_DEFAULT_ON
 	help
 	  This allows LEDs to be initialised in the ON state.
 	  If unsure, say Y.
+
+config LEDS_TRIGGER_SLEEP
+	tristate "LED Sleep Mode Trigger"
+	depends on LEDS_TRIGGERS && HAS_EARLYSUSPEND
+	help
+	  This turns LEDs on when the screen is off but the cpu still running.
 
 comment "iptables trigger is under Netfilter config (LED target)"
 	depends on LEDS_TRIGGERS

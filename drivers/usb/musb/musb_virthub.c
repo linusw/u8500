@@ -84,8 +84,9 @@ static void musb_port_suspend(struct musb *musb, bool do_suspend)
 					&& musb->xceiv->host->b_hnp_enable;
 			if (musb->is_active)
 				mod_timer(&musb->otg_timer, jiffies
-					+ msecs_to_jiffies(
-						OTG_TIME_A_AIDL_BDIS));
+					+ msecs_to_jiffies((
+						OTG_TIME_A_AIDL_BDIS +
+						USB_SUSP_DET_DURATION)));
 			musb_platform_try_idle(musb, 0);
 			break;
 #ifdef	CONFIG_USB_MUSB_OTG

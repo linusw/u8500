@@ -59,6 +59,7 @@ static inline void device_pm_move_last(struct device *dev) {}
 
 extern int dpm_sysfs_add(struct device *);
 extern void dpm_sysfs_remove(struct device *);
+extern void rpm_sysfs_remove(struct device *);
 
 #else /* CONFIG_PM */
 

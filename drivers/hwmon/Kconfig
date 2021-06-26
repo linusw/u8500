@@ -39,6 +39,32 @@ config HWMON_DEBUG_CHIP
 
 comment "Native drivers"
 
+config SENSORS_AB8500
+	tristate "AB8500 thermal monitoring"
+	depends on AB8500_CORE
+	default n
+	help
+	  If you say yes here you get support for the thermal sensor part
+	  of the AB8500 chip. The driver includes thermal management for
+	  AB8500 die and two GPADC channels. The GPADC channel are preferably
+	  used to access sensors outside the AB8500 chip.
+
+	  This driver can also be built as a module.  If so, the module
+	  will be called ab8500-temp.
+
+config SENSORS_DB8500
+	tristate "DB8500 thermal monitoring"
+	depends on UX500_SOC_DB8500
+	default n
+	help
+	  If you say yes here you get support for the thermal sensor part
+	  of the DB8500 chip. The driver includes thermal management for
+	  DB8500 die.
+
+	  This driver can also be built as a module.  If so, the module
+	  will be called db8500_temp.
+
+
 config SENSORS_ABITUGURU
 	tristate "Abit uGuru (rev 1 & 2)"
 	depends on X86 && EXPERIMENTAL
@@ -602,6 +628,48 @@ config SENSORS_LM93
 
 	  This driver can also be built as a module.  If so, the module
 	  will be called lm93.
+
+config SENSORS_LSM303DLH
+	tristate "ST LSM303DLH 3-axis accelerometer and 3-axis magnetometer"
+	depends on I2C
+	default n
+	help
+	  This driver provides support for the LSM303DLH chip which includes a
+	  3-axis accelerometer and a 3-axis magnetometer.
+
+	  This driver can also be built as modules.  If so, the module for
+	  accelerometer will be called lsm303dlh_a and for magnetometer it will
+	  be called lsm303dlh_m.
+
+	  Say Y here if you have a device containing lsm303dlh chip.
+
+config SENSORS_LSM303DLH_INPUT_DEVICE
+	bool "ST LSM303DLH INPUT DEVICE"
+	depends on SENSORS_LSM303DLH
+	default n
+	help
+	  This driver allows device to be used as an input device with
+	  interrupts, need to be enabled only when input device support
+	  is required.
+
+config SENSORS_LSM303DLH_EMULATOR
+	bool "ST LSM303DLH EMULATOR"
+	depends on SENSORS_LSM303DLH
+	default n
+	help
+	  This driver allows to stub the LSM303DLH chip and be able to provide
+	  3-axis values through sysfs entries instead.
+
+config SENSORS_L3G4200D
+	tristate "ST L3G4200D 3-axis gyroscope"
+	depends on I2C
+	default n
+	help
+	  If you say yes here you get support for 3-axis gyroscope device
+	  L3g4200D.
+
+	  This driver can also be built as a module.  If so, the module
+	  will be called l3g4200d.
 
 config SENSORS_LTC4215
 	tristate "Linear Technology LTC4215"

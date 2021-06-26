@@ -41,6 +41,7 @@ config USB_MUSB_SOC
 	default y if ARCH_OMAP4
 	default y if (BF54x && !BF544)
 	default y if (BF52x && !BF522 && !BF523)
+	default y if ARCH_U8500
 
 comment "DaVinci 35x and 644x USB support"
 	depends on USB_MUSB_HDRC && ARCH_DAVINCI_DMx
@@ -56,6 +57,17 @@ comment "OMAP 44xx high speed USB support"
 
 comment "Blackfin high speed USB Support"
 	depends on USB_MUSB_HDRC && ((BF54x && !BF544) || (BF52x && !BF522 && !BF523))
+
+comment "U8500 USB support"
+        depends on USB_MUSB_HDRC && ARCH_U8500
+
+config U8500_USB_HS_OTG
+        boolean "USB HS-OTG support"
+        depends on USB_MUSB_HDRC && ARCH_U8500
+        default y
+        help
+          Say Y here if you want to enable support for the U8500 USB
+          high speed on-the-go USB interface with external ULPI transceiver.
 
 config USB_TUSB6010
 	boolean "TUSB 6010 support"

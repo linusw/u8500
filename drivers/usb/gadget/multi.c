@@ -107,7 +107,11 @@ static struct usb_otg_descriptor otg_descriptor = {
 	/* REVISIT SRP-only hardware is possible, although
 	 * it would not be called "OTG" ...
 	 */
+#ifndef USB_OTG_20
 	.bmAttributes =		USB_OTG_SRP | USB_OTG_HNP,
+#else
+	.bmAttributes =		USB_OTG_SRP | USB_OTG_HNP | USB_OTG_ADP,
+#endif
 };
 
 static const struct usb_descriptor_header *otg_desc[] = {

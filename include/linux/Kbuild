@@ -1,7 +1,9 @@
 header-y += byteorder/
 header-y += can/
+header-y += caif/
 header-y += dvb/
 header-y += hdlc/
+header-y += hsi/
 header-y += isdn/
 header-y += nfsd/
 header-y += raid/
@@ -390,3 +392,6 @@ unifdef-y += xfrm.h
 objhdr-y += version.h
 header-y += wimax.h
 header-y += wimax/
+
+unifdef-y += hwmem.h
+unifdef-y += dispdev.h

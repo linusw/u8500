@@ -71,7 +71,8 @@ void c2_cq_event(struct c2_dev *c2dev, u32 mq_index)
 
 	cq = c2_cq_get(c2dev, mq_index);
 	if (!cq) {
-		printk("discarding events on destroyed CQN=%d\n", mq_index);
+		printk(KERN_INFO "discarding events on destroyed CQN=%d\n",
+				mq_index);
 		return;
 	}
 

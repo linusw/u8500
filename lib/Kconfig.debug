@@ -103,7 +103,7 @@ config HEADERS_CHECK
 
 config DEBUG_SECTION_MISMATCH
 	bool "Enable full Section mismatch analysis"
-	depends on UNDEFINED || (BLACKFIN)
+	depends on UNDEFINED || (BLACKFIN) || ARCH_U8500
 	default y
 	# This option is on purpose disabled for now.
 	# It will be enabled when we are down to a reasonable number
@@ -587,8 +587,9 @@ config DEBUG_LOCKING_API_SELFTESTS
 	  mutexes and rwsems.
 
 config STACKTRACE
-	bool
+	bool "Stacktrace"
 	depends on STACKTRACE_SUPPORT
+	default y
 
 config DEBUG_KOBJECT
 	bool "kobject debugging"
@@ -1122,3 +1123,6 @@ source "samples/Kconfig"
 source "lib/Kconfig.kgdb"
 
 source "lib/Kconfig.kmemcheck"
+
+config TEST_KSTRTOX
+	tristate "Test kstrto*() family of functions at runtime"

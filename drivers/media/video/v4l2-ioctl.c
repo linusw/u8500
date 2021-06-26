@@ -315,7 +315,7 @@ void v4l_printk_ioctl(unsigned int cmd)
 			type = "v4l1";
 			break;
 		}
-		printk("%s", v4l1_ioctls[_IOC_NR(cmd)]);
+		printk(KERN_INFO "%s", v4l1_ioctls[_IOC_NR(cmd)]);
 		return;
 #endif
 	case 'V':
@@ -323,7 +323,7 @@ void v4l_printk_ioctl(unsigned int cmd)
 			type = "v4l2";
 			break;
 		}
-		printk("%s", v4l2_ioctls[_IOC_NR(cmd)]);
+		printk(KERN_INFO "%s", v4l2_ioctls[_IOC_NR(cmd)]);
 		return;
 	default:
 		type = "unknown";
@@ -336,7 +336,7 @@ void v4l_printk_ioctl(unsigned int cmd)
 	case _IOC_READ | _IOC_WRITE: dir = "rw"; break;
 	default:                     dir = "*ERR*"; break;
 	}
-	printk("%s ioctl '%c', dir=%s, #%d (0x%08x)",
+	printk(KERN_INFO "%s ioctl '%c', dir=%s, #%d (0x%08x)",
 		type, _IOC_TYPE(cmd), dir, _IOC_NR(cmd), cmd);
 }
 EXPORT_SYMBOL(v4l_printk_ioctl);

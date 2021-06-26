@@ -25,9 +25,14 @@ struct outer_cache_fns {
 	void (*inv_range)(unsigned long, unsigned long);
 	void (*clean_range)(unsigned long, unsigned long);
 	void (*flush_range)(unsigned long, unsigned long);
+	void (*flush_all)(void);
+	void (*inv_all)(void);
+	void (*disable)(void);
 #ifdef CONFIG_OUTER_CACHE_SYNC
 	void (*sync)(void);
 #endif
+	void (*prefetch_enable)(void);
+	void (*prefetch_disable)(void);
 };
 
 #ifdef CONFIG_OUTER_CACHE
@@ -50,6 +55,36 @@ static inline void outer_flush_range(unsigned long start, unsigned long end)
 		outer_cache.flush_range(start, end);
 }
 
+static inline void outer_flush_all(void)
+{
+	if (outer_cache.flush_all)
+		outer_cache.flush_all();
+}
+
+static inline void outer_inv_all(void)
+{
+	if (outer_cache.inv_all)
+		outer_cache.inv_all();
+}
+
+static inline void outer_disable(void)
+{
+	if (outer_cache.disable)
+		outer_cache.disable();
+}
+
+static inline void outer_prefetch_enable(void)
+{
+	if (outer_cache.prefetch_enable)
+		outer_cache.prefetch_enable();
+}
+
+static inline void outer_prefetch_disable(void)
+{
+	if (outer_cache.prefetch_disable)
+		outer_cache.prefetch_disable();
+}
+
 #else
 
 static inline void outer_inv_range(unsigned long start, unsigned long end)
@@ -58,6 +93,9 @@ static inline void outer_clean_range(unsigned long start, unsigned long end)
 { }
 static inline void outer_flush_range(unsigned long start, unsigned long end)
 { }
+static inline void outer_flush_all(void) { }
+static inline void outer_inv_all(void) { }
+static inline void outer_disable(void) { }
 
 #endif
 

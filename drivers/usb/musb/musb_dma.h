@@ -36,7 +36,7 @@
 #define __MUSB_DMA_H__
 
 struct musb_hw_ep;
-
+struct musb_request;
 /*
  * DMA Controller Abstraction
  *
@@ -89,6 +89,10 @@ struct musb_hw_ep;
 # if !ANOMALY_05000456
 #  define USE_MODE1
 # endif
+#endif
+
+#ifdef CONFIG_USB_U8500_DMA
+#undef USE_MODE1
 #endif
 
 /*
@@ -155,6 +159,10 @@ dma_channel_status(struct dma_channel *c)
  * @channel_release: call this to release a DMA channel
  * @channel_abort: call this to abort a pending DMA transaction,
  *	returning it to FREE (but allocated) state
+ * @is_compatible:allow dma code to indicate incompatibility
+ *	with usb request. Gadget musb driver call this api, if
+ *	available, before dma mappings to avoid any unnecessary
+ *	mapping operations.
  *
  * Controllers manage dma channels.
  */
@@ -169,6 +177,8 @@ struct dma_controller {
 							dma_addr_t dma_addr,
 							u32 length);
 	int			(*channel_abort)(struct dma_channel *);
+	int		(*is_compatible)(struct dma_channel *channel,
+							struct musb_request *);
 };
 
 /* called after channel_program(), may indicate a fault */

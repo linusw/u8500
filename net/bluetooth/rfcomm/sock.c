@@ -757,6 +757,8 @@ static int rfcomm_sock_setsockopt_old(struct socket *sock, int optname, char __u
 			rfcomm_pi(sk)->sec_level = BT_SECURITY_MEDIUM;
 		if (opt & RFCOMM_LM_SECURE)
 			rfcomm_pi(sk)->sec_level = BT_SECURITY_HIGH;
+		if (opt & RFCOMM_LM_SECUREMAX)
+			rfcomm_pi(sk)->sec_level = BT_SECURITY_MAX;
 
 		rfcomm_pi(sk)->role_switch = (opt & RFCOMM_LM_MASTER);
 		break;
@@ -802,7 +804,7 @@ static int rfcomm_sock_setsockopt(struct socket *sock, int level, int optname, c
 			break;
 		}
 
-		if (sec.level > BT_SECURITY_HIGH) {
+		if (sec.level > BT_SECURITY_MAX) {
 			err = -EINVAL;
 			break;
 		}
@@ -860,6 +862,10 @@ static int rfcomm_sock_getsockopt_old(struct socket *sock, int optname, char __u
 		case BT_SECURITY_HIGH:
 			opt = RFCOMM_LM_AUTH | RFCOMM_LM_ENCRYPT |
 							RFCOMM_LM_SECURE;
+			break;
+		case BT_SECURITY_MAX:
+			opt = RFCOMM_LM_AUTH | RFCOMM_LM_ENCRYPT |
+				RFCOMM_LM_SECURE | RFCOMM_LM_SECUREMAX;
 			break;
 		default:
 			opt = 0;

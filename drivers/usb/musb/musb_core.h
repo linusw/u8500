@@ -72,8 +72,6 @@ struct musb_ep;
 #include <linux/usb/hcd.h>
 #include "musb_host.h"
 
-
-
 #ifdef CONFIG_USB_MUSB_OTG
 
 #define	is_peripheral_enabled(musb)	((musb)->board_mode != MUSB_HOST)
@@ -204,6 +202,7 @@ enum musb_g_ep0_state {
 #define OTG_TIME_A_WAIT_BCON	1100		/* min 1 second */
 #define OTG_TIME_A_AIDL_BDIS	200		/* min 200 msec */
 #define OTG_TIME_B_ASE0_BRST	100		/* min 3.125 ms */
+#define USB_SUSP_DET_DURATION	5		/* suspend time 5ms */
 
 
 /*************************** REGISTER ACCESS ********************************/
@@ -492,8 +491,10 @@ extern void musb_platform_save_context(struct musb *musb,
 extern void musb_platform_restore_context(struct musb *musb,
 		struct musb_context_registers *musb_context);
 #else
-#define musb_platform_save_context(m, x)	do {} while (0)
-#define musb_platform_restore_context(m, x)	do {} while (0)
+static inline void musb_platform_save_context(struct musb *musb,
+		      struct musb_context_registers *musb_context) { }
+static inline void musb_platform_restore_context(struct musb *musb,
+			 struct musb_context_registers *musb_context) { }
 #endif
 
 #endif
@@ -598,18 +599,31 @@ extern void musb_hnp_stop(struct musb *musb);
 
 extern int musb_platform_set_mode(struct musb *musb, u8 musb_mode);
 
+#ifdef	CONFIG_PM
+void musb_save_context(struct musb *);
+extern void musb_restore_context(struct musb *musb);
+#endif
+
 #if defined(CONFIG_USB_TUSB6010) || defined(CONFIG_BLACKFIN) || \
 	defined(CONFIG_ARCH_OMAP2430) || defined(CONFIG_ARCH_OMAP3) || \
-	defined(CONFIG_ARCH_OMAP4)
+	defined(CONFIG_ARCH_OMAP4) || defined(CONFIG_ARCH_U8500)
 extern void musb_platform_try_idle(struct musb *musb, unsigned long timeout);
 #else
-#define musb_platform_try_idle(x, y)		do {} while (0)
+static inline void musb_platform_try_idle(struct musb *musb, unsigned long timeout) { }
 #endif
 
 #if defined(CONFIG_USB_TUSB6010) || defined(CONFIG_BLACKFIN)
 extern int musb_platform_get_vbus_status(struct musb *musb);
 #else
-#define musb_platform_get_vbus_status(x)	0
+static inline int musb_platform_get_vbus_status(struct musb *musb) { return 0; }
+#endif
+
+#if defined(CONFIG_ARCH_U8500)
+extern void musb_platform_device_en(int enable);
+extern void musb_platform_session_req(void);
+#else
+static inline void musb_platform_device_en(int enable) { }
+static inline void musb_platform_session_req(void) { }
 #endif
 
 extern int __init musb_platform_init(struct musb *musb, void *board_data);

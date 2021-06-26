@@ -62,6 +62,16 @@ config TEST_POWER
 	help
 	  This driver is used for testing. It's safe to say M here.
 
+config USB_SWITCHER
+	tristate "USB Switch support"
+	help
+	  Say Y to enable support for USB switch devices.
+
+config FAKE_DFMS_DEVICES
+	bool "fake power supply sysfs devices"
+	help
+	  Say Y To create fake sysfs entries in order to keep Samsung DFMS happy.
+
 config BATTERY_DS2760
 	tristate "DS2760 battery driver (HP iPAQ & others)"
 	select W1
@@ -141,5 +151,23 @@ config CHARGER_PCF50633
 	depends on MFD_PCF50633
 	help
 	 Say Y to include support for NXP PCF50633 Main Battery Charger.
+
+config AB8500_BM
+	bool "AB8500 Battery Management Driver"
+	depends on AB8500_CORE && AB8500_GPADC && ARCH_U8500
+	help
+	  Say Y to include support for AB8500 battery management.
+
+config AB8500_BATTERY_THERM_ON_BATCTRL
+	bool "Thermistor connected on BATCTRL ADC"
+	depends on AB8500_BM
+	help
+	  Say Y to enable battery temperature measurements using
+	  thermistor connected on BATCTRL ADC.
+
+config MEASURE_TEMP_BY_ADC_TABLE
+	bool "Temperature measurement by ADC table"
+	help
+	  Say Y to include support for measurement by ADC table.	  
 
 endif # POWER_SUPPLY

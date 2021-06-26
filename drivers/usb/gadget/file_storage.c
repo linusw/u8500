@@ -486,19 +486,6 @@ static int exception_in_progress(struct fsg_dev *fsg)
 	return (fsg->state > FSG_STATE_IDLE);
 }
 
-/* Make bulk-out requests be divisible by the maxpacket size */
-static void set_bulk_out_req_length(struct fsg_dev *fsg,
-		struct fsg_buffhd *bh, unsigned int length)
-{
-	unsigned int	rem;
-
-	bh->bulk_out_intended_length = length;
-	rem = length % fsg->bulk_out_maxpacket;
-	if (rem > 0)
-		length += fsg->bulk_out_maxpacket - rem;
-	bh->outreq->length = length;
-}
-
 static struct fsg_dev			*the_fsg;
 static struct usb_gadget_driver		fsg_driver;
 
@@ -719,10 +706,10 @@ static void bulk_out_complete(struct usb_ep *ep, struct usb_request *req)
 	struct fsg_buffhd	*bh = req->context;
 
 	dump_msg(fsg, "bulk-out", req->buf, req->actual);
-	if (req->status || req->actual != bh->bulk_out_intended_length)
+	if (req->status || req->actual != req->length)
 		DBG(fsg, "%s --> %d, %u/%u\n", __func__,
 				req->status, req->actual,
-				bh->bulk_out_intended_length);
+				req->length);
 	if (req->status == -ECONNRESET)		// Request was cancelled
 		usb_ep_fifo_flush(ep);
 
@@ -1337,8 +1324,7 @@ static int do_write(struct fsg_dev *fsg)
 
 			/* amount is always divisible by 512, hence by
 			 * the bulk-out maxpacket size */
-			bh->outreq->length = bh->bulk_out_intended_length =
-					amount;
+			bh->outreq->length = amount;
 			bh->outreq->short_not_ok = 1;
 			start_transfer(fsg, fsg->bulk_out, bh->outreq,
 					&bh->outreq_busy, &bh->state);
@@ -1909,6 +1895,18 @@ static int halt_bulk_in_endpoint(struct fsg_dev *fsg)
 			return -EINTR;
 		rc = usb_ep_set_halt(fsg->bulk_in);
 	}
+#ifdef CONFIG_ARCH_U8500
+	/* temporary HACK: There is a problem using mass storage with
+	 * the musb driver. The problem is that the status command
+	 * wrapper block gets queued in hardware before the clear-stall
+	 * is executed. When the clear stall gets executed the status
+	 * command wrapper block gets dropped and the USB host OS
+	 * starts hanging. We are not sure where the proper place to
+	 * fix this bug is. Until further, add a delay here so that
+	 * the USB host gets time to execute the clear-stall request.
+	 */
+	msleep_interruptible(100);  /* temporary HACK */
+#endif
 	return rc;
 }
 
@@ -1998,8 +1996,7 @@ static int throw_away_data(struct fsg_dev *fsg)
 
 			/* amount is always divisible by 512, hence by
 			 * the bulk-out maxpacket size */
-			bh->outreq->length = bh->bulk_out_intended_length =
-					amount;
+			bh->outreq->length = amount;
 			bh->outreq->short_not_ok = 1;
 			start_transfer(fsg, fsg->bulk_out, bh->outreq,
 					&bh->outreq_busy, &bh->state);
@@ -2676,8 +2673,8 @@ static int get_next_command(struct fsg_dev *fsg)
 		}
 
 		/* Queue a request to read a Bulk-only CBW */
-		set_bulk_out_req_length(fsg, bh, USB_BULK_CB_WRAP_LEN);
-		bh->outreq->short_not_ok = 1;
+		bh->outreq->length = USB_BULK_CB_WRAP_LEN;
+		bh->outreq->short_not_ok = 0;
 		start_transfer(fsg, fsg->bulk_out, bh->outreq,
 				&bh->outreq_busy, &bh->state);
 

@@ -22,6 +22,23 @@ config INPUT_88PM860X_ONKEY
 	  To compile this driver as a module, choose M here: the module
 	  will be called 88pm860x_onkey.
 
+config INPUT_AB8500_ACCDET
+	bool "AB8500 AV Accessory detection"
+	depends on AB8500_CORE && AB8500_GPADC && AB8500_GPIO
+	help
+	  Say Y here to enable AV accessory detection features for ST-Ericsson's
+	  AB8500 Mix-Sig PMIC.
+
+config INPUT_AB8500_PONKEY
+	tristate "AB5500/AB8500 Pon (PowerOn) Key"
+	depends on AB5500_CORE || AB8500_CORE
+	help
+	  Say Y here to use the PowerOn Key for ST-Ericsson's AB5500/AB8500
+	  Mix-Sig PMICs.
+
+	  To compile this driver as a module, choose M here: the module
+	  will be called ab8500-ponkey.
+
 config INPUT_AD714X
 	tristate "Analog Devices AD714x Capacitance Touch Sensor"
 	help
@@ -183,6 +200,17 @@ config INPUT_ATI_REMOTE2
 	  To compile this driver as a module, choose M here: the module will be
 	  called ati_remote2.
 
+config INPUT_KEYCHORD
+	tristate "Key chord input driver support"
+	help
+	  Say Y here if you want to enable the key chord driver
+	  accessible at /dev/keychord.  This driver can be used
+	  for receiving notifications when client specified key
+	  combinations are pressed.
+
+	  To compile this driver as a module, choose M here: the
+	  module will be called keychord.
+
 config INPUT_KEYSPAN_REMOTE
 	tristate "Keyspan DMR USB remote control (EXPERIMENTAL)"
 	depends on EXPERIMENTAL
@@ -302,6 +330,11 @@ config INPUT_WINBOND_CIR
 	  To compile this driver as a module, choose M here: the module will be
 	  called winbond_cir.
 
+config INPUT_GPIO
+	tristate "GPIO driver support"
+	help
+	  Say Y here if you want to support gpio based keys, wheels etc...
+
 config HP_SDC_RTC
 	tristate "HP SDC Real Time Clock"
 	depends on (GSC || HP300) && SERIO
@@ -390,4 +423,14 @@ config INPUT_PCAP
 	  To compile this driver as a module, choose M here: the
 	  module will be called pcap_keys.
 
+config INPUT_STE_FF_VIBRA
+	tristate "ST-Ericsson Force Feedback Vibrator"
+	depends on STE_AUDIO_IO_DEV
+	select INPUT_FF_MEMLESS
+	help
+	  This option enables support for ST-Ericsson's Vibrator which
+	  registers as an input force feedback driver.
+
+	  To compile this driver as a module, choose M here. The module will
+	  be called ste_ff_vibra.
 endif

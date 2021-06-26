@@ -188,27 +188,27 @@ BOOLEAN XGIInitNew( PXGI_HW_DEVICE_INFO HwDeviceExtension )
 
     if ( pVBInfo->FBAddr == 0 )
 {
-       printk("\n pVBInfo->FBAddr == 0 ");
+       printk(KERN_INFO "\n pVBInfo->FBAddr == 0 ");
        return( FALSE ) ;
 }
-printk("1");
+printk(KERN_INFO "1");
     if ( pVBInfo->BaseAddr == 0 )
 {
-       printk("\npVBInfo->BaseAddr == 0 ");
+       printk(KERN_INFO "\npVBInfo->BaseAddr == 0 ");
         return( FALSE ) ;
 }
-printk("2");
+printk(KERN_INFO "2");
 
     XGINew_SetReg3( ( pVBInfo->BaseAddr + 0x12 ) , 0x67 ) ;	/* 3c2 <- 67 ,ynlai */
 
     pVBInfo->ISXPDOS = 0 ;
-printk("3");
+printk(KERN_INFO "3");
 
 if ( !HwDeviceExtension->bIntegratedMMEnabled )
 {
         return( FALSE ) ;	/* alan */
 }
-printk("4");
+printk(KERN_INFO "4");
 
 //    XGI_MemoryCopy( VBIOSVersion , HwDeviceExtension->szVBIOSVer , 4 ) ;
 
@@ -233,7 +233,7 @@ printk("4");
     pVBInfo->Part3Port = pVBInfo->BaseAddr + XGI_CRT2_PORT_12 ;
     pVBInfo->Part4Port = pVBInfo->BaseAddr + XGI_CRT2_PORT_14 ;
     pVBInfo->Part5Port = pVBInfo->BaseAddr + XGI_CRT2_PORT_14 + 2 ;
-printk("5");
+printk(KERN_INFO "5");
 
     if ( HwDeviceExtension->jChipType < XG20 )			/* kuku 2004/06/25 */
     XGI_GetVBType( pVBInfo ) ;         /* Run XGI_GetVBType before InitTo330Pointer */
@@ -245,7 +245,7 @@ printk("5");
 
     /* 1.Openkey */
     XGINew_SetReg1( pVBInfo->P3c4 , 0x05 , 0x86 ) ;
-printk("6");
+printk(KERN_INFO "6");
 
     /* GetXG21Sense (GPIO) */
     if ( HwDeviceExtension->jChipType == XG21 )
@@ -256,7 +256,7 @@ printk("6");
     {
     	XGINew_GetXG27Sense(HwDeviceExtension, pVBInfo) ;
     }
-printk("7");
+printk(KERN_INFO "7");
 
     /* 2.Reset Extended register */
 
@@ -269,7 +269,7 @@ printk("7");
     /* for( i = 0x06 ; i <= 0x27 ; i++ ) */
     /* XGINew_SetReg1( pVBInfo->P3c4 , i , 0 ) ; */
 
-printk("8");
+printk(KERN_INFO "8");
 
     if(( HwDeviceExtension->jChipType >= XG20 ) || ( HwDeviceExtension->jChipType >= XG40))
     {
@@ -281,7 +281,7 @@ printk("8");
         for( i = 0x31 ; i <= 0x3D ; i++ )
             XGINew_SetReg1( pVBInfo->P3c4 , i , 0 ) ;
     }
-printk("9");
+printk(KERN_INFO "9");
 
     if ( HwDeviceExtension->jChipType == XG42 )			/* [Hsuan] 2004/08/20 Auto over driver for XG42 */
       XGINew_SetReg1( pVBInfo->P3c4 , 0x3B , 0xC0 ) ;
@@ -292,7 +292,7 @@ printk("9");
     for( i = 0x79 ; i <= 0x7C ; i++ )
         XGINew_SetReg1( pVBInfo->P3d4 , i , 0 ) ;		/* shampoo 0208 */
 
-printk("10");
+printk(KERN_INFO "10");
 
     if ( HwDeviceExtension->jChipType >= XG20 )
         XGINew_SetReg1( pVBInfo->P3d4 , 0x97 , *pVBInfo->pXGINew_CR97 ) ;
@@ -305,7 +305,7 @@ printk("10");
     if ( HwDeviceExtension->jChipType < XG40 )
         XGINew_SetMemoryClock( HwDeviceExtension , pVBInfo ) ;  */
 
-printk("11");
+printk(KERN_INFO "11");
 
     /* 4.SetDefExt1Regs begin */
     XGINew_SetReg1( pVBInfo->P3c4 , 0x07 , *pVBInfo->pSR07 ) ;
@@ -325,7 +325,7 @@ printk("11");
     /* SR11 = 0x0F ; */
     /* XGINew_SetReg1( pVBInfo->P3c4 , 0x11 , SR11 ) ; */
 
-printk("12");
+printk(KERN_INFO "12");
 
    if ( HwDeviceExtension->jChipType < XG20 )		/* kuku 2004/06/25 */
     {
@@ -362,7 +362,7 @@ printk("12");
 //        }
 //    }
 
-printk("13");
+printk(KERN_INFO "13");
 
     if ( HwDeviceExtension->jChipType >= XG40 )
     {
@@ -389,7 +389,7 @@ printk("13");
         if ( Temp == 1 )
             XGINew_SetReg1( pVBInfo->P3d4 , 0x48 , 0x20 ) ;	/* CR48 */
     }
-printk("14");
+printk(KERN_INFO "14");
 
     if ( HwDeviceExtension->jChipType < XG40 )
         XGINew_SetReg1( pVBInfo->P3d4 , 0x49 , pVBInfo->CR49[ 0 ] ) ;
@@ -399,7 +399,7 @@ printk("14");
     XGINew_SetReg1( pVBInfo->P3c4 , 0x23 , *pVBInfo->pSR23 ) ;
     XGINew_SetReg1( pVBInfo->P3c4 , 0x24 , *pVBInfo->pSR24 ) ;
     XGINew_SetReg1( pVBInfo->P3c4 , 0x25 , pVBInfo->SR25[ 0 ] ) ;
-printk("15");
+printk(KERN_INFO "15");
 
     if ( HwDeviceExtension->jChipType < XG20 )		/* kuku 2004/06/25 */
     {
@@ -413,7 +413,7 @@ printk("15");
 
         XGINew_SetReg1( pVBInfo->Part1Port , 0x02 , ( *pVBInfo->pCRT2Data_1_2 ) ) ;
 
-printk("16");
+printk(KERN_INFO "16");
 
     XGINew_SetReg1( pVBInfo->Part1Port , 0x2E , 0x08 ) ;	/* use VB */
     } /* != XG20 */
@@ -432,7 +432,7 @@ printk("16");
         XGINew_SetReg1( pVBInfo->P3c4 , 0x32 , *pVBInfo->pSR32 ) ;
     }
     XGINew_SetReg1( pVBInfo->P3c4 , 0x33 , *pVBInfo->pSR33 ) ;
-printk("17");
+printk(KERN_INFO "17");
 
 /*
     if ( HwDeviceExtension->jChipType >= XG40 )
@@ -454,36 +454,36 @@ printk("17");
         XGI_LockCRT2( HwDeviceExtension, pVBInfo ) ;
     }
     }	/* != XG20 */
-printk("18");
+printk(KERN_INFO "18");
 
     if ( HwDeviceExtension->jChipType < XG40 )
         XGINew_SetReg1( pVBInfo->P3d4 , 0x83 , 0x00 ) ;
-printk("181");
+printk(KERN_INFO "181");
 
     if ( HwDeviceExtension->bSkipSense == FALSE )
     {
-printk("182");
+printk(KERN_INFO "182");
 
         XGI_SenseCRT1(pVBInfo) ;
 
-printk("183");
+printk(KERN_INFO "183");
         /* XGINew_DetectMonitor( HwDeviceExtension ) ; */
 pVBInfo->IF_DEF_CH7007 = 0;
         if ( ( HwDeviceExtension->jChipType == XG21 ) && (pVBInfo->IF_DEF_CH7007) )
         {
-printk("184");
+printk(KERN_INFO "184");
            XGI_GetSenseStatus( HwDeviceExtension , pVBInfo ) ; 	/* sense CRT2 */
-printk("185");
+printk(KERN_INFO "185");
 
         }
         if ( HwDeviceExtension->jChipType == XG21 )
         {
-printk("186");
+printk(KERN_INFO "186");
 
           XGINew_SetRegANDOR( pVBInfo->P3d4 , 0x32 , ~Monitor1Sense , Monitor1Sense ) ;	/* Z9 default has CRT */
        	  temp = GetXG21FPBits( pVBInfo ) ;
           XGINew_SetRegANDOR( pVBInfo->P3d4 , 0x37 , ~0x01, temp ) ;
-printk("187");
+printk(KERN_INFO "187");
 
           }
         if ( HwDeviceExtension->jChipType == XG27 )
@@ -493,7 +493,7 @@ printk("187");
           XGINew_SetRegANDOR( pVBInfo->P3d4 , 0x37 , ~0x03, temp ) ;
         }
     }
-printk("19");
+printk(KERN_INFO "19");
 
     if ( HwDeviceExtension->jChipType >= XG40 )
     {
@@ -529,16 +529,16 @@ printk("19");
             else
 #endif
 {
-printk("20");
+printk(KERN_INFO "20");
 
                XGINew_SetDRAMSize_340( HwDeviceExtension , pVBInfo) ;
 }
-printk("21");
+printk(KERN_INFO "21");
 
         }
     }		/* XG40 */
 
-printk("22");
+printk(KERN_INFO "22");
 
 
     /* SetDefExt2Regs begin */
@@ -572,18 +572,18 @@ printk("22");
 
     XGINew_SetReg1( pVBInfo->P3c4 , 0x21 , *pVBInfo->pSR21 ) ;
 
-printk("23");
+printk(KERN_INFO "23");
 
 
     XGINew_ChkSenseStatus ( HwDeviceExtension , pVBInfo ) ;
     XGINew_SetModeScratch ( HwDeviceExtension , pVBInfo ) ;
 
-printk("24");
+printk(KERN_INFO "24");
 
 
 XGINew_SetReg1( pVBInfo->P3d4 , 0x8c , 0x87);
 XGINew_SetReg1( pVBInfo->P3c4 , 0x14 , 0x31);
-printk("25");
+printk(KERN_INFO "25");
 
     return( TRUE ) ;
 } /* end of init */
