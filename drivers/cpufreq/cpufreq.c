@@ -368,6 +368,27 @@ show_one(scaling_cur_freq, cur);
 static int __cpufreq_set_policy(struct cpufreq_policy *data,
 				struct cpufreq_policy *policy);
 
+int cpufreq_update_freq(int cpu, unsigned int min, unsigned int max)
+{
+	int ret;
+	struct cpufreq_policy new_policy;
+	struct cpufreq_policy *policy = cpufreq_cpu_get(cpu);
+
+	ret = cpufreq_get_policy(&new_policy, cpu);
+	if (ret)
+		return -EINVAL;
+
+	new_policy.min = min;
+	new_policy.max = max;
+
+	ret = __cpufreq_set_policy(policy, &new_policy);
+	policy->user_policy.min = policy->min;
+	policy->user_policy.max = policy->max;
+
+	return ret;
+}
+EXPORT_SYMBOL(cpufreq_update_freq);
+
 /**
  * cpufreq_per_cpu_attr_write() / store_##file_name() - sysfs write access
  */
@@ -1606,6 +1627,10 @@ static int __cpufreq_set_policy(struct cpufreq_policy *data,
 				struct cpufreq_policy *policy)
 {
 	int ret = 0;
+	unsigned int prev_min = 0;
+	unsigned int prev_max = 0;
+	prev_min = data->min;
+	prev_max = data->max;
 
 	pr_debug("setting new policy for CPU %u: %u - %u kHz\n", policy->cpu,
 		policy->min, policy->max);
@@ -1644,6 +1669,9 @@ static int __cpufreq_set_policy(struct cpufreq_policy *data,
 	data->min = policy->min;
 	data->max = policy->max;
 
+	if(prev_min != data->min || prev_max != data->max)
+		pr_info("new min and max freqs are %u - %u kHz\n",
+					data->min, data->max);
 	pr_debug("new min and max freqs are %u - %u kHz\n",
 					data->min, data->max);
 

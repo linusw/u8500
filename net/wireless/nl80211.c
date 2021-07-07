@@ -2213,6 +2213,10 @@ static int nl80211_send_station(struct sk_buff *msg, u32 pid, u32 seq,
 	}
 	nla_nest_end(msg, sinfoattr);
 
+ 	if (sinfo->filled & STATION_INFO_ASSOC_REQ_IES)
+		NLA_PUT(msg, NL80211_ATTR_IE, sinfo->assoc_req_ies_len,
+			sinfo->assoc_req_ies);
+
 	return genlmsg_end(msg, hdr);
 
  nla_put_failure:
@@ -3867,22 +3871,45 @@ static bool nl80211_valid_auth_type(enum nl80211_auth_type auth_type)
 static bool nl80211_valid_wpa_versions(u32 wpa_versions)
 {
 	return !(wpa_versions & ~(NL80211_WPA_VERSION_1 |
+#ifdef CONFIG_TARGET_LOCALE_CHN
+				NL80211_WPA_VERSION_2 | 
+				NL80211_WAPI_VERSION_1 ));
+#else
 				  NL80211_WPA_VERSION_2));
+#endif
 }
 
 static bool nl80211_valid_akm_suite(u32 akm)
 {
 	return akm == WLAN_AKM_SUITE_8021X ||
+#if 1 /* AKM_SUITE for CCKM */
+		akm == WLAN_AKM_SUITE_CCKM ||
+#endif
+#ifdef CONFIG_TARGET_LOCALE_CHN
+		akm == WLAN_AKM_SUITE_PSK ||
+		akm == WLAN_AKM_SUITE_WAPI_PSK ||
+		akm == WLAN_AKM_SUITE_WAPI_CERT;
+#else
 		akm == WLAN_AKM_SUITE_PSK;
+#endif
 }
 
 static bool nl80211_valid_cipher_suite(u32 cipher)
 {
+#ifdef CONFIG_TARGET_LOCALE_CHN
+	if(cipher == WLAN_CIPHER_SUITE_SMS4)
+		printk(KERN_DEBUG " ** nl80211_valid_cipher_suite, is WLAN_CIPHER_SUITE_SMS4\n");
+#endif
 	return cipher == WLAN_CIPHER_SUITE_WEP40 ||
 		cipher == WLAN_CIPHER_SUITE_WEP104 ||
 		cipher == WLAN_CIPHER_SUITE_TKIP ||
 		cipher == WLAN_CIPHER_SUITE_CCMP ||
+#ifdef CONFIG_TARGET_LOCALE_CHN
+		cipher == WLAN_CIPHER_SUITE_AES_CMAC ||
+		cipher == WLAN_CIPHER_SUITE_SMS4;
+#else
 		cipher == WLAN_CIPHER_SUITE_AES_CMAC;
+#endif
 }
 
 
@@ -4048,12 +4075,9 @@ static int nl80211_crypto_settings(struct cfg80211_registered_device *rdev,
 		if (len % sizeof(u32))
 			return -EINVAL;
 
-		if (settings->n_akm_suites > NL80211_MAX_NR_AKM_SUITES)
-			return -EINVAL;
-
 		memcpy(settings->akm_suites, data, len);
 
-		for (i = 0; i < settings->n_akm_suites; i++)
+		for (i = 0; i < settings->n_ciphers_pairwise; i++)
 			if (!nl80211_valid_akm_suite(settings->akm_suites[i]))
 				return -EINVAL;
 	}
