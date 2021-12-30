@@ -46,6 +46,9 @@
 #define COUNTS_PER_SEC			(0xF000 / 60)
 #define AB8500_RTC_EPOCH		2000
 
+static struct rtc_device *ab8500_rtc;
+static struct delayed_work sync_work;
+
 static const u8 ab8500_rtc_time_regs[] = {
 	AB8500_RTC_WATCH_TMIN_HI_REG, AB8500_RTC_WATCH_TMIN_MID_REG,
 	AB8500_RTC_WATCH_TMIN_LOW_REG, AB8500_RTC_WATCH_TSECHI_REG,
@@ -88,22 +91,17 @@ static int ab8500_rtc_read_time(struct device *dev, struct rtc_time *tm)
 	if (retval < 0)
 		return retval;
 
-	/* Early AB8500 chips will not clear the rtc read request bit */
-	if (abx500_get_chip_id(dev) == 0) {
-		msleep(1);
-	} else {
-		/* Wait for some cycles after enabling the rtc read in ab8500 */
-		while (time_before(jiffies, timeout)) {
-			retval = abx500_get_register_interruptible(dev,
-				AB8500_RTC, AB8500_RTC_READ_REQ_REG, &value);
-			if (retval < 0)
-				return retval;
+	/* Wait for some cycles after enabling the rtc read in ab8500 */
+	while (time_before(jiffies, timeout)) {
+		retval = abx500_get_register_interruptible(dev,
+			AB8500_RTC, AB8500_RTC_READ_REQ_REG, &value);
+		if (retval < 0)
+			return retval;
 
-			if (!(value & RTC_READ_REQUEST))
-				break;
+		if (!(value & RTC_READ_REQUEST))
+			break;
 
-			msleep(1);
-		}
+		mdelay(1);
 	}
 
 	/* Read the Watchtime registers */
@@ -241,8 +239,20 @@ static int ab8500_rtc_set_alarm(struct device *dev, struct rtc_wkalrm *alarm)
 	 */
 	secs -= get_elapsed_seconds(AB8500_RTC_EPOCH);
 
+#ifndef CONFIG_ANDROID
+	secs += 30; /* Round to nearest minute */
+#endif
+
 	mins = secs / 60;
 
+#ifdef CONFIG_ANDROID
+	/*
+	 * Needed due to Android believes all hw have a wake-up resolution
+	 * in seconds.
+	 */
+	if (secs%60)
+		mins++;
+#endif
 	buf[2] = mins & 0xFF;
 	buf[1] = (mins >> 8) & 0xFF;
 	buf[0] = (mins >> 16) & 0xFF;
@@ -256,6 +266,106 @@ static int ab8500_rtc_set_alarm(struct device *dev, struct rtc_wkalrm *alarm)
 	}
 
 	return ab8500_rtc_irq_enable(dev, alarm->enabled);
+}
+
+
+static int ab8500_rtc_set_calibration(struct device *dev, int calibration)
+{
+	int retval;
+	u8  rtccal = 0;
+
+	/*
+	 * Check that the calibration value (which is in units of 0.5 parts-per-million)
+	 * is in the AB8500's range for RtcCalibration register.
+	 */
+	if ((calibration < -127) || (calibration > 127)) {
+		dev_err(dev, "RtcCalibration value outside permitted range\n");
+		return -EINVAL;
+	}
+
+	/*
+	 * The AB8500 uses sign (in bit7) and magnitude (in bits0-7)
+	 * so need to convert to this sort of representation before writing
+	 * into RtcCalibration register...
+	 */
+	if (calibration >= 0)
+		rtccal = 0x7F & calibration;
+	else
+		rtccal = ~(calibration -1) | 0x80;
+
+	retval = abx500_set_register_interruptible(dev, AB8500_RTC,
+			AB8500_RTC_CALIB_REG, rtccal);
+
+	return retval;
+}
+
+static int ab8500_rtc_get_calibration(struct device *dev, int *calibration)
+{
+	int retval;
+	u8  rtccal = 0;
+
+	retval =  abx500_get_register_interruptible(dev, AB8500_RTC,
+			AB8500_RTC_CALIB_REG, &rtccal);
+	if (retval >= 0) {
+		/*
+		 * The AB8500 uses sign (in bit7) and magnitude (in bits0-7)
+		 * so need to convert value from RtcCalibration register into
+		 * a two's complement signed value...
+		 */
+		if (rtccal & 0x80)
+			*calibration = 0 - (rtccal & 0x7F);
+		else
+			*calibration = 0x7F & rtccal;
+	}
+
+	return retval;
+}
+
+static ssize_t ab8500_sysfs_store_rtc_calibration(struct device *dev,
+				struct device_attribute *attr,
+				const char *buf, size_t count)
+{
+	int retval;
+	int calibration = 0;
+
+	if (sscanf(buf, " %i ", &calibration) != 1) {
+		dev_err(dev, "Failed to store RTC calibration attribute\n");
+		return -EINVAL;
+	}
+
+	retval = ab8500_rtc_set_calibration(dev, calibration);
+
+	return retval ? retval : count;
+}
+
+static ssize_t ab8500_sysfs_show_rtc_calibration(struct device *dev,
+				struct device_attribute *attr, char *buf)
+{
+	int  retval = 0;
+	int  calibration = 0;
+
+	retval = ab8500_rtc_get_calibration(dev, &calibration);
+	if (retval < 0) {
+		dev_err(dev, "Failed to read RTC calibration attribute\n");
+		sprintf(buf, "0\n");
+		return retval;
+	}
+
+	return sprintf(buf, "%d\n", calibration);
+}
+
+static DEVICE_ATTR(rtc_calibration, S_IRUGO | S_IWUSR,
+		   ab8500_sysfs_show_rtc_calibration,
+		   ab8500_sysfs_store_rtc_calibration);
+
+static int ab8500_sysfs_rtc_register(struct device *dev)
+{
+	return device_create_file(dev, &dev_attr_rtc_calibration);
+}
+
+static void ab8500_sysfs_rtc_unregister(struct device *dev)
+{
+	device_remove_file(dev, &dev_attr_rtc_calibration);
 }
 
 static irqreturn_t rtc_alarm_handler(int irq, void *data)
@@ -277,6 +387,26 @@ static const struct rtc_class_ops ab8500_rtc_ops = {
 	.alarm_irq_enable	= ab8500_rtc_irq_enable,
 };
 
+/* make it possible to update a 2nd rtc */
+void __attribute__((weak)) rtc_hctohc(struct rtc_time tm)
+{
+}
+
+static void ab8500_rtc_sync_work(struct work_struct *work)
+{
+	struct rtc_time r;
+	unsigned long t;
+	struct timespec ts;
+
+	ab8500_rtc_read_time(ab8500_rtc->dev.parent, &r);
+	rtc_tm_to_time(&r, &t);
+	set_normalized_timespec(&ts, (time_t) t, 0);
+	do_settimeofday(&ts);
+	rtc_hctohc(r);
+	/* Once every minute to match calibration */
+	schedule_delayed_work(&sync_work, 60 * HZ);
+}
+
 static int __devinit ab8500_rtc_probe(struct platform_device *pdev)
 {
 	int err;
@@ -295,7 +425,7 @@ static int __devinit ab8500_rtc_probe(struct platform_device *pdev)
 		return err;
 
 	/* Wait for reset by the PorRtc */
-	msleep(1);
+	mdelay(1);
 
 	err = abx500_get_register_interruptible(&pdev->dev, AB8500_RTC,
 		AB8500_RTC_STAT_REG, &rtc_ctrl);
@@ -308,6 +438,8 @@ static int __devinit ab8500_rtc_probe(struct platform_device *pdev)
 		return -ENODEV;
 	}
 
+	device_init_wakeup(&pdev->dev, true);
+
 	rtc = rtc_device_register("ab8500-rtc", &pdev->dev, &ab8500_rtc_ops,
 			THIS_MODULE);
 	if (IS_ERR(rtc)) {
@@ -316,8 +448,8 @@ static int __devinit ab8500_rtc_probe(struct platform_device *pdev)
 		return err;
 	}
 
-	err = request_threaded_irq(irq, NULL, rtc_alarm_handler, 0,
-				   "ab8500-rtc", rtc);
+	err = request_threaded_irq(irq, NULL, rtc_alarm_handler,
+		IRQF_NO_SUSPEND, "ab8500-rtc", rtc);
 	if (err < 0) {
 		rtc_device_unregister(rtc);
 		return err;
@@ -325,6 +457,17 @@ static int __devinit ab8500_rtc_probe(struct platform_device *pdev)
 
 	platform_set_drvdata(pdev, rtc);
 
+
+	err = ab8500_sysfs_rtc_register(&pdev->dev);
+	if (err) {
+		dev_err(&pdev->dev, "sysfs RTC failed to register\n");
+		return err;
+	}
+
+	ab8500_rtc = rtc;
+	INIT_DELAYED_WORK_DEFERRABLE(&sync_work, ab8500_rtc_sync_work);
+	/* Once every minute to match calibration */
+	schedule_delayed_work(&sync_work, 60 * HZ);
 	return 0;
 }
 
@@ -333,12 +476,32 @@ static int __devexit ab8500_rtc_remove(struct platform_device *pdev)
 	struct rtc_device *rtc = platform_get_drvdata(pdev);
 	int irq = platform_get_irq_byname(pdev, "ALARM");
 
+	ab8500_sysfs_rtc_unregister(&pdev->dev);
+
 	free_irq(irq, rtc);
 	rtc_device_unregister(rtc);
 	platform_set_drvdata(pdev, NULL);
 
 	return 0;
 }
+
+#ifdef CONFIG_PM
+static int ab8500_rtc_suspend(struct platform_device *pdev, pm_message_t state)
+{
+	cancel_delayed_work_sync(&sync_work);
+	return 0;
+}
+
+static int ab8500_rtc_resume(struct platform_device *pdev)
+{
+	/* Delay by 300ms to let resume finnish */
+	schedule_delayed_work(&sync_work, 3 * HZ / 10);
+	return 0;
+}
+#else
+#define ab8500_rtc_suspend NULL
+#define ab8500_rtc_resume NULL
+#endif
 
 static struct platform_driver ab8500_rtc_driver = {
 	.driver = {
@@ -347,6 +510,8 @@ static struct platform_driver ab8500_rtc_driver = {
 	},
 	.probe	= ab8500_rtc_probe,
 	.remove = __devexit_p(ab8500_rtc_remove),
+	.suspend = ab8500_rtc_suspend,
+	.resume = ab8500_rtc_resume,
 };
 
 static int __init ab8500_rtc_init(void)
