@@ -16,6 +16,8 @@
 
 #define D40_TYPE_TO_GROUP(type) (type / 16)
 #define D40_TYPE_TO_EVENT(type) (type % 16)
+#define D40_GROUP_SIZE 8
+#define D40_PHYS_TO_GROUP(phys) ((phys & (D40_GROUP_SIZE - 1)) / 2)
 
 /* Most bits of the CFG register are the same in log as in phy mode */
 #define D40_SREG_CFG_MST_POS		15
@@ -60,8 +62,6 @@
 #define D40_SREG_ELEM_LOG_LIDX_MASK	(0xFF << D40_SREG_ELEM_LOG_LIDX_POS)
 
 /* Link register */
-#define D40_DEACTIVATE_EVENTLINE	0x0
-#define D40_ACTIVATE_EVENTLINE		0x1
 #define D40_EVENTLINE_POS(i)		(2 * i)
 #define D40_EVENTLINE_MASK(i)		(0x3 << D40_EVENTLINE_POS(i))
 
@@ -94,10 +94,13 @@
 
 /* LCSP2 */
 #define D40_MEM_LCSP2_ECNT_POS		16
+#define D40_MEM_LCSP2_DPTR_POS		 0
 
 #define D40_MEM_LCSP2_ECNT_MASK		(0xFFFF << D40_MEM_LCSP2_ECNT_POS)
+#define D40_MEM_LCSP2_DPTR_MASK		(0xFFFF << D40_MEM_LCSP2_DPTR_POS)
 
 /* LCSP3 */
+#define D40_MEM_LCSP3_DPTR_POS		16
 #define D40_MEM_LCSP3_DCFG_MST_POS	15
 #define D40_MEM_LCSP3_DCFG_TIM_POS	14
 #define D40_MEM_LCSP3_DCFG_EIM_POS	13
@@ -107,6 +110,7 @@
 #define D40_MEM_LCSP3_DLOS_POS		 1
 #define D40_MEM_LCSP3_DTCP_POS		 0
 
+#define D40_MEM_LCSP3_DPTR_MASK		(0xFFFF << D40_MEM_LCSP3_DPTR_POS)
 #define D40_MEM_LCSP3_DLOS_MASK		(0x7F << D40_MEM_LCSP3_DLOS_POS)
 #define D40_MEM_LCSP3_DTCP_MASK		(0x1 << D40_MEM_LCSP3_DTCP_POS)
 
@@ -123,9 +127,21 @@
 
 /* DMA Register Offsets */
 #define D40_DREG_GCC		0x000
+#define D40_DREG_GCC_ENA	0x1
+/* This assumes that there are only 4 event groups */
+#define D40_DREG_GCC_ENABLE_ALL	0xff01
+#define D40_DREG_GCC_EVTGRP_POS 8
+#define D40_DREG_GCC_SRC 0
+#define D40_DREG_GCC_DST 1
+#define D40_DREG_GCC_EVTGRP_ENA(x, y) \
+	(1 << (D40_DREG_GCC_EVTGRP_POS + 2 * x + y))
+
 #define D40_DREG_PRTYP		0x004
 #define D40_DREG_PRSME		0x008
 #define D40_DREG_PRSMO		0x00C
+#define D40_DREG_PRSM_MODE_MASK		0x3
+#define D40_DREG_PRSM_MODE_SECURE	0x1
+
 #define D40_DREG_PRMSE		0x010
 #define D40_DREG_PRMSO		0x014
 #define D40_DREG_PRMOE		0x018
@@ -184,9 +200,6 @@
 #define D40_DREG_PERIPHID0	0xFE0
 #define D40_DREG_PERIPHID1	0xFE4
 #define D40_DREG_PERIPHID2	0xFE8
-#define D40_DREG_PERIPHID2_REV_POS 4
-#define D40_DREG_PERIPHID2_REV_MASK (0xf << D40_DREG_PERIPHID2_REV_POS)
-#define D40_DREG_PERIPHID2_DESIGNER_MASK 0xf
 #define D40_DREG_PERIPHID3	0xFEC
 #define D40_DREG_CELLID0	0xFF0
 #define D40_DREG_CELLID1	0xFF4
@@ -296,8 +309,6 @@ struct d40_def_lcsp {
 enum d40_lli_flags {
 	LLI_ADDR_INC	= 1 << 0,
 	LLI_TERM_INT	= 1 << 1,
-	LLI_CYCLIC	= 1 << 2,
-	LLI_LAST_LINK	= 1 << 3,
 };
 
 void d40_phy_cfg(struct stedma40_chan_cfg *cfg,
@@ -315,27 +326,42 @@ int d40_phy_sg_to_lli(struct scatterlist *sg,
 		      struct d40_phy_lli *lli,
 		      dma_addr_t lli_phys,
 		      u32 reg_cfg,
-		      struct stedma40_half_channel_info *info,
-		      struct stedma40_half_channel_info *otherinfo,
-		      unsigned long flags);
+		      bool cyclic,
+		      bool cyclic_int,
+		      struct stedma40_half_channel_info *info);
+
+int d40_phy_fill_lli(struct d40_phy_lli *lli,
+		     dma_addr_t data,
+		     u32 data_size,
+		     dma_addr_t next_lli,
+		     u32 reg_cfg,
+		     struct stedma40_half_channel_info *info,
+		     unsigned int flags);
 
 /* Logical channels */
+
+void d40_log_fill_lli(struct d40_log_lli *lli,
+		      dma_addr_t data,
+		      u32 data_size,
+		      u32 reg_cfg,
+		      u32 data_width,
+		      unsigned int flags);
 
 int d40_log_sg_to_lli(struct scatterlist *sg,
 		      int sg_len,
 		      dma_addr_t dev_addr,
 		      struct d40_log_lli *lli_sg,
 		      u32 lcsp13, /* src or dst*/
-		      u32 data_width1, u32 data_width2);
+		      u32 data_width);
 
 void d40_log_lli_lcpa_write(struct d40_log_lli_full *lcpa,
 			    struct d40_log_lli *lli_dst,
 			    struct d40_log_lli *lli_src,
-			    int next, unsigned int flags);
+			    int next, bool interrupt);
 
 void d40_log_lli_lcla_write(struct d40_log_lli *lcla,
 			    struct d40_log_lli *lli_dst,
 			    struct d40_log_lli *lli_src,
-			    int next, unsigned int flags);
+			    int next, bool interrupt);
 
 #endif /* STE_DMA40_LLI_H */
